@@ -67,3 +67,5 @@ body {
   gap: 1.25rem; /* ~= gap-5 */
 }
 
+/* somewhere global (e.g., globals.css) */
+.btn { cursor: pointer; }

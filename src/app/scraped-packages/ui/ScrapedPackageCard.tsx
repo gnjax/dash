@@ -1,8 +1,8 @@
-// src/app/scraped-packages/ui/ScrapedPackageCard.tsx
 'use client';
 import Link from 'next/link';
 import type { ScrapedPackageRow } from '../scraped-packages.client';
 import { useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
 
 function ItemsHover({ names }: { names: string[] }) {
   const [open, setOpen] = useState(false);
@@ -38,6 +38,7 @@ export default function ScrapedPackageCard({ pkg }: { pkg: ScrapedPackageRow }) 
   const [saving, setSaving] = useState(false);
   const isBlacklisted = status === 'Blacklist';
   const isProcessed = status === 'Processed';
+  const router = useRouter();
 
   async function toggleBlacklist() {
     if (saving) return;
@@ -60,13 +61,32 @@ export default function ScrapedPackageCard({ pkg }: { pkg: ScrapedPackageRow }) 
     }
   }
 
+  async function viewOrProceed() {
+    if (!isProcessed) {
+      // Not processed yet → create/reuse and proceed
+      router.push(`/inventory-filler?packageId=${pkg.id}`);
+      return;
+    }
+
+    // Processed → look up existing session id and open it (read-only after finalize)
+    try {
+      const res = await fetch(`/api/fill-sessions/by-package?scrapedPackageId=${encodeURIComponent(pkg.id)}`, { cache: 'no-store' });
+      const j = await res.json();
+      if (res.ok && j.sessionId) {
+        router.push(`/inventory-filler?sessionId=${j.sessionId}`);
+      } else {
+        // fallback (shouldn't normally happen)
+        router.push(`/inventory-filler?packageId=${pkg.id}`);
+      }
+    } catch {
+      router.push(`/inventory-filler?packageId=${pkg.id}`);
+    }
+  }
+
   return (
     <div className="card flex h-full flex-col overflow-hidden">
       {/* header */}
-      <div
-        className="flex items-center justify-between border-b px-3 py-2"
-        style={{ borderColor: 'var(--color-border)' }}
-      >
+      <div className="flex items-center justify-between border-b px-3 py-2" style={{ borderColor: 'var(--color-border)' }}>
         <div className="text-xs uppercase tracking-wide text-gray-400">{pkg.source}</div>
         <div className="text-xs text-gray-400">{pkg.dateShipped ?? '—'}</div>
       </div>
@@ -84,12 +104,7 @@ export default function ScrapedPackageCard({ pkg }: { pkg: ScrapedPackageRow }) 
           <div className="truncate text-xs">
             <span className="text-gray-400">Tracking:</span>{' '}
             {pkg.intlTrackingUrl ? (
-              <a
-                className="text-blue-400 hover:underline"
-                href={pkg.intlTrackingUrl}
-                target="_blank"
-                rel="noreferrer"
-              >
+              <a className="text-blue-400 hover:underline" href={pkg.intlTrackingUrl} target="_blank" rel="noreferrer">
                 {pkg.intlTrackingNumber}
               </a>
             ) : (
@@ -101,9 +116,7 @@ export default function ScrapedPackageCard({ pkg }: { pkg: ScrapedPackageRow }) 
         {/* thumbnails */}
         <div className="grid grid-cols-3 md:grid-cols-4 gap-2">
           {pkg.items.slice(0, 8).map((it, i) => {
-            const href = it.listingId
-              ? `https://buyee.jp/item/jdirectitems/auction/${it.listingId}`
-              : undefined;
+            const href = it.listingId ? `https://buyee.jp/item/jdirectitems/auction/${it.listingId}` : undefined;
             const img = it.listingId ? `/api/thumb/${it.listingId}` : '/placeholder-item.png';
             const el = (
               <img
@@ -117,19 +130,13 @@ export default function ScrapedPackageCard({ pkg }: { pkg: ScrapedPackageRow }) 
               <div
                 key={it.id}
                 className="relative aspect-square overflow-hidden rounded-md ring-1"
-                style={{
-                  background: '#0f1522',
-                  borderColor: 'transparent',
-                  boxShadow: 'inset 0 0 0 1px rgba(255,255,255,.04)',
-                }}
+                style={{ background: '#0f1522', borderColor: 'transparent', boxShadow: 'inset 0 0 0 1px rgba(255,255,255,.04)' }}
               >
                 {href ? (
                   <a href={href} target="_blank" rel="noreferrer" title={it.title || ''}>
                     {el}
                   </a>
-                ) : (
-                  el
-                )}
+                ) : el}
               </div>
             );
           })}
@@ -140,27 +147,15 @@ export default function ScrapedPackageCard({ pkg }: { pkg: ScrapedPackageRow }) 
           <button
             onClick={toggleBlacklist}
             disabled={saving}
-            className={
-              isBlacklisted
-                ? 'btn bg-red-600 hover:bg-red-500 disabled:opacity-50'
-                : 'btn  disabled:opacity-50'
-            }
-            title={
-              isBlacklisted
-                ? 'Click to unblacklist (back to To-do)'
-                : 'Blacklist this package'
-            }
+            className={isBlacklisted ? 'btn bg-red-600 hover:bg-red-500 disabled:opacity-50' : 'btn  disabled:opacity-50'}
+            title={isBlacklisted ? 'Click to unblacklist (back to To-do)' : 'Blacklist this package'}
           >
             {isBlacklisted ? 'Blacklisted' : 'Blacklist'}
           </button>
 
-          {/* Route to inventory filler; show "View session" once processed */}
-          <Link
-            href={`/inventory-filler?packageId=${pkg.id}`}
-            className="btn btn-success"
-          >
+          <button onClick={viewOrProceed} className="btn btn-success">
             {isProcessed ? 'View session' : 'Proceed'}
-          </Link>
+          </button>
         </div>
       </div>
     </div>

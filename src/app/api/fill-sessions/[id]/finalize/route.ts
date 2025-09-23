@@ -4,7 +4,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { PPM_DENOM } from '@/lib/weights';
-import { Prisma } from '@prisma/client';
+import { PackageStatus } from '@prisma/client';
 
 export async function POST(
   _req: NextRequest,
@@ -28,7 +28,7 @@ export async function POST(
       if (sess?.sourceType === 'ScrapedPackage' && sess.scrapedPackageId) {
         await db.scrapedPackage.update({
           where: { id: sess.scrapedPackageId },
-          data: { status: Prisma.PackageStatus.Processed },
+          data: { status: PackageStatus.Processed },
         });
       }
       return { created: 0, alreadyFinalized: true };
@@ -94,7 +94,6 @@ export async function POST(
       const sourceShip = Math.round((pkgShippingTotal * si.shippingWeightPpm) / PPM_DENOM);
 
       for (const e of si.entries) {
-        const tagIds = e.entryTags.map(t => t.tagId);
         const qty = e.quantity;
         const baseName = e.nameOverride ?? titleByKey[key] ?? '(untitled)';
         const originType = isScraped ? 'Scraped' : 'Manual';
@@ -110,30 +109,30 @@ export async function POST(
         }));
 
         // create items; duplicates (same fillEntryId, ordinal) are ignored
-        await db.inventoryItem.createMany({ data: rows, skipDuplicates: true });
+        const result = await db.inventoryItem.createMany({
+          data: rows,
+          skipDuplicates: true,
+        });
+        created += result.count; // ✅ accurate number created this run
 
-        // fetch ids of all items for this entry (1..qty)
+        // fetch ids of all items for this entry (for tagging)
         const items = await db.inventoryItem.findMany({
           where: { fillEntryId: e.id },
           select: { id: true, ordinal: true },
         });
 
-        // upsert tags for each item (skipDuplicates guards)
+        // upsert first tag (with placement) for each item if present
         const t = e.entryTags[0];
         if (t && items.length) {
           await db.inventoryItemTag.createMany({
             data: items.map(it => ({
               itemId: it.id,
               tagId: t.tagId,
-              placementId: t.placementId ?? null,   // ✅ carry placement
+              placementId: t.placementId ?? null,
             })),
             skipDuplicates: true,
           });
         }
-
-        // count how many we *effectively* have for this entry now
-        const have = items.length;
-        if (have < qty) created += (qty - have); else created += 0; // conservative
       }
     }
 
@@ -141,7 +140,7 @@ export async function POST(
     if (isScraped && session.scrapedPackageId) {
       await db.scrapedPackage.update({
         where: { id: session.scrapedPackageId },
-        data: { status: Prisma.PackageStatus.Processed },
+        data: { status: PackageStatus.Processed },
       });
     }
 
