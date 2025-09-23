@@ -1,0 +1,263 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model FxRate {
+  date     DateTime   // UTC midnight of the rate day
+  base     String     // e.g. "JPY"
+  quote    String     // e.g. "EUR"
+  rate     Decimal    @db.Decimal(20, 10) // high precision cache
+  source   String     @default("frankfurter")
+  fetchedAt DateTime  @default(now())
+
+  @@id([date, base, quote])
+  @@index([base, quote])
+}
+
+model ListingImageCache {
+  listingId String   @id
+  source    String?
+  url       String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+/// =====================
+/// NEW INVENTORY MODELS
+/// =====================
+
+enum InventoryOriginType {
+  Scraped
+  Manual
+}
+
+model InventoryItem {
+  id            String               @id @default(uuid())
+  name          String
+  originType    InventoryOriginType
+  scrapedItemId String?
+  manualLineId  String?
+  fillEntryId   String?
+  ordinal       Int?                 
+  createdAt     DateTime             @default(now())
+
+  tags          InventoryItemTag[]
+
+  @@index([scrapedItemId])
+  @@index([manualLineId])
+  @@index([fillEntryId])
+  @@unique([fillEntryId, ordinal])   
+}
+
+model InventoryItemTag {
+  itemId String
+  tagId  String
+  placementId String?
+
+  item   InventoryItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  tag    Tag           @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([itemId, tagId])
+  @@index([tagId])
+}
+
+/// =====================
+/// MANUAL PURCHASE INPUT
+/// =====================
+
+model ManualPurchase {
+  id                        String   @id @default(uuid())
+  currency                  String   @default("JPY")
+  intlShippingTotalYen      Decimal  @default(0) @db.Decimal(12, 2)
+  domesticShippingTotalYen  Decimal  @default(0) @db.Decimal(12, 2)
+  customsTotalYen           Decimal  @default(0) @db.Decimal(12, 2)
+  subtotalYen               Decimal? @db.Decimal(12, 2) // optional declared subtotal
+  notes                     String?
+  createdAt                 DateTime @default(now())
+
+  lines                     ManualLine[]
+}
+
+model ManualLine {
+  id               String   @id @default(uuid())
+  manualPurchaseId String
+  title            String
+  priceYen         Decimal  @db.Decimal(12, 2)
+
+  purchase         ManualPurchase @relation(fields: [manualPurchaseId], references: [id], onDelete: Cascade)
+
+  @@index([manualPurchaseId])
+}
+
+/// =====================
+/// FILL SESSION + INPUTS
+/// =====================
+
+enum FillSourceType {
+  ScrapedPackage
+  Manual
+}
+
+
+model InventoryFillSession {
+  id               String         @id @default(uuid())
+  sourceType       FillSourceType
+  scrapedPackageId String?
+  manualPurchaseId String?
+  customsTotalYen  Decimal        @default(0) @db.Decimal(12, 2)
+  createdAt        DateTime       @default(now())
+  finalizedAt      DateTime?     
+
+  sourceItems      InventoryFillSourceItem[]
+  entries          InventoryFillEntry[]
+
+  @@index([scrapedPackageId])
+  @@index([manualPurchaseId])
+}
+
+model InventoryFillSourceItem {
+  id            String   @id @default(uuid())
+  sessionId     String
+  scrapedItemId String?  // when ScrapedPackage
+  manualLineId  String?  // when Manual
+
+  // percentage weights stored as integer parts-per-million (PPM). 100% = 1,000,000
+  // This is the source-item's share of the WHOLE package shipping
+  shippingWeightPpm Int  @default(0)
+
+  session       InventoryFillSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  entries       InventoryFillEntry[]
+
+  @@index([sessionId])
+  @@index([scrapedItemId])
+  @@index([manualLineId])
+}
+
+model InventoryFillEntry {
+  id                String   @id @default(uuid())
+  sessionId         String
+  sourceItemId      String
+  nameOverride      String?
+  quantity          Int      @default(1)
+
+  // within the source item: these two ALSO use PPM
+  priceWeightPpm    Int      @default(0)
+  shippingWeightPpm Int      @default(0)
+
+  // tags chosen for this entry template (copied to each created InventoryItem)
+  entryTags         InventoryFillEntryTag[]
+
+  session           InventoryFillSession   @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  sourceItem        InventoryFillSourceItem @relation(fields: [sourceItemId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId])
+  @@index([sourceItemId])
+}
+
+model InventoryFillEntryTag {
+  entryId String
+  tagId   String
+  placementId String?
+
+  entry   InventoryFillEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  tag     Tag                 @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([entryId, tagId])
+  @@index([tagId])
+}
+
+
+model Tag {
+  id          String  @id @default(uuid())
+  name        String
+  description String?
+
+  placements TagPlacement[]
+  itemTags   InventoryItemTag[]
+  fillEntryTags InventoryFillEntryTag[]
+
+  @@unique([name])
+  @@index([name])
+}
+
+model TagPlacement {
+  id                String  @id @default(uuid())
+  tagId             String
+  parentPlacementId String?
+
+  tag      Tag            @relation(fields: [tagId], references: [id], onDelete: Restrict)
+  parent   TagPlacement?  @relation("TP_Children", fields: [parentPlacementId], references: [id])
+  children TagPlacement[] @relation("TP_Children")
+
+  // back-relations for PlacementClosure (REQUIRED)
+  asAncestor   PlacementClosure[] @relation("PC_Ancestor")
+  asDescendant PlacementClosure[] @relation("PC_Descendant")
+
+  @@unique([parentPlacementId, tagId])
+  @@index([tagId])
+}
+
+model PlacementClosure {
+  ancestorPlacementId   String
+  descendantPlacementId String
+  depth                 Int
+
+  ancestor   TagPlacement @relation("PC_Ancestor", fields: [ancestorPlacementId], references: [id], onDelete: Cascade)
+  descendant TagPlacement @relation("PC_Descendant", fields: [descendantPlacementId], references: [id], onDelete: Cascade)
+
+  @@id([ancestorPlacementId, descendantPlacementId])
+  @@index([descendantPlacementId, depth])
+  @@index([ancestorPlacementId, depth])
+}
+
+enum PackageStatus {
+  Todo
+  Processed
+  Blacklist
+}
+
+model ScrapedPackage {
+  id      String @id @default(uuid())
+  source  String @default("buyee")
+  pageUrl String
+
+  dateShipped        DateTime?
+  packageNumber      String    @unique // <- unique key
+  intlTrackingNumber String?
+  intlTrackingUrl    String?
+
+  internationalShippingFeeYen Decimal? @db.Decimal(12, 2)
+  domesticShippingFeeYen      Decimal? @db.Decimal(12, 2)
+
+  raw         Json? // original scraper blob
+  firstSeenAt DateTime @default(now())
+  lastSeenAt  DateTime @default(now())
+
+  status PackageStatus @default(Todo)
+
+  items ScrapedItem[]
+
+  @@index([dateShipped])
+  @@index([intlTrackingNumber])
+}
+
+model ScrapedItem {
+  id               String   @id @default(uuid())
+  scrapedPackageId String
+  orderNumber      String?
+  titleJa          String? // <- keep original
+  titleEn          String? // <- translated
+  itemUrl          String?
+  listingId        String?
+  priceYen         Decimal? @db.Decimal(12, 2)
+
+  scrapedPackage ScrapedPackage @relation(fields: [scrapedPackageId], references: [id], onDelete: Cascade)
+
+  @@index([scrapedPackageId])
+  @@index([listingId])
+}
