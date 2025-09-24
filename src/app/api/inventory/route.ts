@@ -17,45 +17,97 @@ function toNum(d: any) {
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const limit = Math.max(1, Math.min(100, Number(searchParams.get('limit') ?? '50')));
-  const cursor = searchParams.get('cursor');
-  const q = (searchParams.get('q') || '').trim();
+  const cursor = searchParams.get('cursor') || undefined;
 
-  // --- Build optional WHERE for search ---
-  // name (InventoryItem), tag (InventoryItemTag -> Tag), packageNumber (ScrapedPackage)
-  // For packageNumber, first resolve sessions->entries so we can filter by fillEntryId.
-  let entryIdsFromPackageQuery: string[] = [];
-  if (q.length) {
-    const pkgs = await prisma.scrapedPackage.findMany({
-      where: { packageNumber: { contains: q, mode: 'insensitive' } },
-      select: { id: true },
-    });
-    if (pkgs.length) {
-      const sess = await prisma.inventoryFillSession.findMany({
-        where: { scrapedPackageId: { in: pkgs.map(p => p.id) } },
+  // Support stacked filters: multiple ?q= values -> AND across terms
+  const terms = searchParams.getAll('q').map(s => s.trim()).filter(Boolean);
+  const singleQ = (searchParams.get('q') || '').trim();
+  if (!terms.length && singleQ) terms.push(singleQ);
+
+  // Helper to build a where-clause for ONE term
+  async function buildWhereForTerm(q: string) {
+    // Package number -> entryIds
+    let entryIdsFromPackageQuery: string[] = [];
+    {
+      const pkgs = await prisma.scrapedPackage.findMany({
+        where: { packageNumber: { contains: q, mode: 'insensitive' } },
         select: { id: true },
       });
-      if (sess.length) {
-        const entryIds = await prisma.inventoryFillEntry.findMany({
-          where: { sessionId: { in: sess.map(s => s.id) } },
+      if (pkgs.length) {
+        const sess = await prisma.inventoryFillSession.findMany({
+          where: { scrapedPackageId: { in: pkgs.map(p => p.id) } },
           select: { id: true },
         });
-        entryIdsFromPackageQuery = entryIds.map(e => e.id);
+        if (sess.length) {
+          const entryIds = await prisma.inventoryFillEntry.findMany({
+            where: { sessionId: { in: sess.map(s => s.id) } },
+            select: { id: true },
+          });
+          entryIdsFromPackageQuery = entryIds.map(e => e.id);
+        }
       }
     }
+
+    // Match any segment in placement chain
+    //   tags (name ~ q) -> placements -> closure descendants -> InventoryItemTag.placementId
+    let itemIdsFromPlacementQuery: string[] = [];
+    {
+      const tagHits = await prisma.tag.findMany({
+        where: { name: { contains: q, mode: 'insensitive' } },
+        select: { id: true },
+      });
+      const tagIds = tagHits.map(t => t.id);
+
+      if (tagIds.length) {
+        const ancPlacements = await prisma.tagPlacement.findMany({
+          where: { tagId: { in: tagIds } },
+          select: { id: true },
+        });
+        const ancIds = ancPlacements.map(p => p.id);
+
+        let descIds: string[] = [];
+        if (ancIds.length) {
+          const closures = await prisma.placementClosure.findMany({
+            where: { ancestorPlacementId: { in: ancIds } },
+            select: { descendantPlacementId: true },
+          });
+          descIds = Array.from(new Set(closures.map(c => c.descendantPlacementId)));
+        }
+
+        const invTags = await prisma.inventoryItemTag.findMany({
+          where: {
+            OR: [
+              { tagId: { in: tagIds } },
+              ...(descIds.length ? [{ placementId: { in: descIds } }] as const : []),
+            ],
+          },
+          select: { itemId: true },
+        });
+        itemIdsFromPlacementQuery = Array.from(new Set(invTags.map(it => it.itemId)));
+      }
+    }
+
+    // OR group for this term; the final WHERE will AND these groups for all terms
+    const clause: any = {
+      OR: [
+        { name: { contains: q, mode: 'insensitive' } },
+        { tags: { some: { tag: { name: { contains: q, mode: 'insensitive' } } } } },
+        ...(itemIdsFromPlacementQuery.length ? [{ id: { in: itemIdsFromPlacementQuery } }] : []),
+        ...(entryIdsFromPackageQuery.length ? [{ fillEntryId: { in: entryIdsFromPackageQuery } }] : []),
+      ],
+    };
+    return clause;
   }
 
-  const where =
-    q.length === 0
-      ? undefined
-      : {
-          OR: [
-            { name: { contains: q, mode: 'insensitive' } },
-            { tags: { some: { tag: { name: { contains: q, mode: 'insensitive' } } } } },
-            ...(entryIdsFromPackageQuery.length
-              ? [{ fillEntryId: { in: entryIdsFromPackageQuery } }]
-              : []),
-          ],
-        };
+  // Compose WHERE across terms (AND)
+  let where: any = undefined;
+  if (terms.length) {
+    const clauses = [];
+    for (const t of terms) {
+      clauses.push(await buildWhereForTerm(t));
+    }
+    where = { AND: clauses };
+  }
 
   // 1) Page of items
   const items = await prisma.inventoryItem.findMany({
@@ -80,9 +132,8 @@ export async function GET(req: NextRequest) {
     },
   });
 
-  // 2) Batch lookups needed for allocations
+  // 2) Batch lookups for allocations (same logic as before)
   const fillEntryIds = Array.from(new Set(items.map(i => i.fillEntryId).filter(Boolean) as string[]));
-
   const entries = fillEntryIds.length
     ? await prisma.inventoryFillEntry.findMany({
         where: { id: { in: fillEntryIds } },
@@ -128,23 +179,25 @@ export async function GET(req: NextRequest) {
     : [];
   const sessionsById = new Map(sessions.map(s => [s.id, s]));
 
-  // all session source items (to compute package subtotal)
   const allSessSourceItems = sessionIds.length
     ? await prisma.inventoryFillSourceItem.findMany({
         where: { sessionId: { in: sessionIds } },
         select: { sessionId: true, scrapedItemId: true, manualLineId: true },
       })
     : [];
-  const sessToSourceItems = new Map<string, { scrapedItemId: string | null; manualLineId: string | null }[]>();
+  const sessToSourceItems = new Map<
+    string,
+    { scrapedItemId: string | null; manualLineId: string | null }[]
+  >();
   for (const si of allSessSourceItems) {
     const arr = sessToSourceItems.get(si.sessionId) ?? [];
     arr.push({ scrapedItemId: si.scrapedItemId ?? null, manualLineId: si.manualLineId ?? null });
     sessToSourceItems.set(si.sessionId, arr);
   }
 
-  // Price lookups
+  // Prices
   const scrapedIds = Array.from(new Set(allSessSourceItems.map(si => si.scrapedItemId).filter(Boolean) as string[]));
-  const manualIds  = Array.from(new Set(allSessSourceItems.map(si => si.manualLineId ).filter(Boolean) as string[]));
+  const manualIds = Array.from(new Set(allSessSourceItems.map(si => si.manualLineId).filter(Boolean) as string[]));
 
   const scrapedItems = scrapedIds.length
     ? await prisma.scrapedItem.findMany({
@@ -158,11 +211,10 @@ export async function GET(req: NextRequest) {
         select: { id: true, priceYen: true },
       })
     : [];
-
   const scrapedPriceById = new Map(scrapedItems.map(si => [si.id, toNum(si.priceYen)]));
-  const manualPriceById  = new Map(manualLines.map(ml => [ml.id, toNum(ml.priceYen)]));
+  const manualPriceById = new Map(manualLines.map(ml => [ml.id, toNum(ml.priceYen)]));
 
-  // Session-level shipping totals & dates
+  // Shipping & dates
   const scrapedPkgIds = Array.from(new Set(sessions.map(s => s.scrapedPackageId).filter(Boolean) as string[]));
   const manualPurchaseIds = Array.from(new Set(sessions.map(s => s.manualPurchaseId).filter(Boolean) as string[]));
 
@@ -193,9 +245,9 @@ export async function GET(req: NextRequest) {
     : [];
   const manualById = new Map(manualPurchases.map(m => [m.id, m]));
 
-  // Placement label via closure (root → … → leaf). We want **leaf at end**, so sort by depth DESC (depth 0 is leaf).
+  // Build placement labels (Root > ... > Leaf) with leaf last
   const placementIds = Array.from(
-    new Set(items.flatMap(i => i.tags?.map(t => t.placementId).filter(Boolean) as string[] ?? []))
+    new Set(items.flatMap(i => i.tags?.map(t => t.placementId).filter(Boolean) as string[] ?? [])),
   );
   const placementLabels = new Map<string, string>();
   if (placementIds.length) {
@@ -204,7 +256,7 @@ export async function GET(req: NextRequest) {
       select: {
         descendantPlacementId: true,
         depth: true,
-        ancestor: { select: { id: true, tag: { select: { name: true } } } },
+        ancestor: { select: { tag: { select: { name: true } } } },
       },
     });
     const byDesc = new Map<string, { depth: number; name: string }[]>();
@@ -216,19 +268,18 @@ export async function GET(req: NextRequest) {
       byDesc.set(c.descendantPlacementId, arr);
     }
     for (const [desc, arr] of byDesc) {
-      // depth: 0=self(leaf), larger=ancestors. For leaf at end -> sort DESC so root ... leaf
+      // depth: 0=leaf, >0 ancestors. For root → ... → leaf order, sort DESC by depth.
       arr.sort((a, b) => b.depth - a.depth);
       placementLabels.set(desc, arr.map(x => x.name).join(' > '));
     }
   }
 
-  // 3) Build rows
+  // 3) Rows
   const rows: any[] = [];
-
   for (const it of items) {
-    const fillEntryId = it.fillEntryId || null;
-    const entry = fillEntryId ? entriesById.get(fillEntryId) : null;
+    const entry = it.fillEntryId ? entriesById.get(it.fillEntryId) : null;
 
+    // even if no entry (should be rare), still render tags & minimal fields
     if (!entry) {
       const tagParts = (it.tags || []).map(tp => {
         const t = tp.tag?.name ?? '';
@@ -249,25 +300,24 @@ export async function GET(req: NextRequest) {
 
     const qty = Math.max(1, toNum(entry.quantity));
     const entryPricePPM = toNum(entry.priceWeightPpm);
-    const entryShipPPM  = toNum(entry.shippingWeightPpm);
+    const entryShipPPM = toNum(entry.shippingWeightPpm);
 
     const src = sourceItemsById.get(entry.sourceItemId)!;
     const sourceItemShipPPM = toNum(src.shippingWeightPpm);
 
-    // Source base price (JPY)
+    // Source price (JPY)
     let sourcePriceYen = 0;
     if (src.scrapedItemId) sourcePriceYen = scrapedPriceById.get(src.scrapedItemId) ?? 0;
     else if (src.manualLineId) sourcePriceYen = manualPriceById.get(src.manualLineId) ?? 0;
 
     // Package subtotal (JPY)
     let packageSubtotal = 0;
-    const sessSources = sessToSourceItems.get(entry.sessionId) ?? [];
-    for (const s of sessSources) {
+    for (const s of (sessToSourceItems.get(entry.sessionId) ?? [])) {
       if (s.scrapedItemId) packageSubtotal += scrapedPriceById.get(s.scrapedItemId) ?? 0;
       else if (s.manualLineId) packageSubtotal += manualPriceById.get(s.manualLineId) ?? 0;
     }
 
-    // Session meta: shipping + dates
+    // Session meta
     const sess = sessionsById.get(entry.sessionId)!;
     let pkgShipTotal = 0;
     let fxDateISO: string | null = null;
@@ -277,7 +327,7 @@ export async function GET(req: NextRequest) {
     if (sess.sourceType === 'ScrapedPackage' && sess.scrapedPackageId) {
       const pkg = scrapedPkgById.get(sess.scrapedPackageId) || null;
       const intl = toNum(pkg?.internationalShippingFeeYen ?? 0);
-      const dom  = toNum(pkg?.domesticShippingFeeYen ?? 0);
+      const dom = toNum(pkg?.domesticShippingFeeYen ?? 0);
       pkgShipTotal = intl + dom;
       fxDateISO = pkg?.dateShipped ? pkg.dateShipped.toISOString().slice(0, 10) : null;
       packageNumber = (pkg as any)?.packageNumber ?? null;
@@ -285,7 +335,7 @@ export async function GET(req: NextRequest) {
     } else if (sess.sourceType === 'Manual' && sess.manualPurchaseId) {
       const mp = manualById.get(sess.manualPurchaseId) || null;
       const intl = toNum((mp as any)?.intlShippingTotalYen ?? 0);
-      const dom  = toNum((mp as any)?.domesticShippingTotalYen ?? 0);
+      const dom = toNum((mp as any)?.domesticShippingTotalYen ?? 0);
       pkgShipTotal = intl + dom;
       purchaseDateISO = (mp as any)?.datePurchased
         ? new Date((mp as any).datePurchased).toISOString().slice(0, 10)
@@ -293,24 +343,23 @@ export async function GET(req: NextRequest) {
       fxDateISO = purchaseDateISO;
     }
 
-    // Allocations (JPY) — same as Inventory Filler
-    const baseAllocJPY        = Math.round(sourcePriceYen * (entryPricePPM / PPM_DENOM));
-    const sourceShipAllocJPY  = Math.round(pkgShipTotal   * (sourceItemShipPPM / PPM_DENOM));
-    const entryShipAllocJPY   = Math.round(sourceShipAllocJPY * (entryShipPPM / PPM_DENOM));
+    // Allocations (same as filler)
+    const baseAllocJPY = Math.round(sourcePriceYen * (entryPricePPM / PPM_DENOM));
+    const sourceShipAllocJPY = Math.round(pkgShipTotal * (sourceItemShipPPM / PPM_DENOM));
+    const entryShipAllocJPY = Math.round(sourceShipAllocJPY * (entryShipPPM / PPM_DENOM));
 
     let entryCustomsJPY = 0;
     if (packageSubtotal > 0) {
       const customsTotal = toNum(sess.customsTotalYen ?? 0);
-      const sourceShare  = sourcePriceYen / packageSubtotal;
+      const sourceShare = sourcePriceYen / packageSubtotal;
       entryCustomsJPY = Math.round(customsTotal * sourceShare * (entryPricePPM / PPM_DENOM));
     }
 
-    const basePerUnitJPY    = Math.round(baseAllocJPY / qty);
-    const shipPerUnitJPY    = Math.round(entryShipAllocJPY / qty);
+    const basePerUnitJPY = Math.round(baseAllocJPY / qty);
+    const shipPerUnitJPY = Math.round(entryShipAllocJPY / qty);
     const customsPerUnitJPY = Math.round(entryCustomsJPY / qty);
-    const totalPerUnitJPY   = basePerUnitJPY + shipPerUnitJPY + customsPerUnitJPY;
+    const totalPerUnitJPY = basePerUnitJPY + shipPerUnitJPY + customsPerUnitJPY;
 
-    // Tag chain: "Tag (Root > ... > Leaf)" — leaf at the end
     const tagParts = (it.tags || []).map(tp => {
       const t = tp.tag?.name ?? '';
       const pname = tp.placementId ? (placementLabels.get(tp.placementId) || '') : '';
