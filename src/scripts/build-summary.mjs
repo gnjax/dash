@@ -16,10 +16,10 @@ const TEXT_EXTS = new Set([
   // code
   '.ts', '.tsx', '.js', '.jsx', '.mjs', '.cjs',
   '.css', '.scss', '.sass',
-  '.html', '.htm',
-  '.json', '.md', '.mdx',
+  '.htm',
+  '.mdx',
   '.yml', '.yaml', '.toml', '.ini', '.conf',
-  '.sql', '.prisma',
+  '.prisma',
   '.sh', '.bash', '.zsh',
   '.py', '.rb', '.go', '.rs', '.kt', '.java',
   '.m', '.mm', '.swift',
