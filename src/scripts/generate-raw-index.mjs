@@ -35,6 +35,7 @@ const IGNORE_NAMES = new Set([
   "tmp",
   "temp",
   ".DS_Store",
+  ".secrets"
 ]);
 
 function toPosix(p) {

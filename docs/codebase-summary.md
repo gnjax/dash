@@ -1,8 +1,8 @@
 # Codebase Summary
 
-> Generated: 2025-09-24T22:31:15.779Z
-> Commit: c5c837de1eb5c6fd0871c3a2dd2f9a39dacf9e23
-> Date: 2025-09-25 00:07:58 +0200
+> Generated: 2025-09-24T22:32:32.947Z
+> Commit: 88e1b5a1aef4d66fd34ca5e01b6b6138a7df34bc
+> Date: 2025-09-25 00:31:15 +0200
 > Remote: git@github.com:gnjax/dash.git
 
 This file concatenates important text/code files in the repo so a single raw URL can be shared.
@@ -6241,6 +6241,7 @@ const IGNORE_NAMES = new Set([
   "tmp",
   "temp",
   ".DS_Store",
+  ".secrets"
 ]);
 
 function toPosix(p) {
