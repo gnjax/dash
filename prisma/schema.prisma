@@ -8,10 +8,10 @@ datasource db {
 }
 
 model FxRate {
-  date     DateTime   // UTC midnight of the rate day
-  base     String     // e.g. "JPY"
-  quote    String     // e.g. "EUR"
-  rate     Decimal    @db.Decimal(20, 10) // high precision cache
+  date     DateTime
+  base     String
+  quote    String
+  rate     Decimal    @db.Decimal(20, 10)
   source   String     @default("frankfurter")
   fetchedAt DateTime  @default(now())
 
@@ -36,6 +36,13 @@ enum InventoryOriginType {
   Manual
 }
 
+enum InventoryCondition {
+  Loose
+  Boxed
+  CIB
+  NIB
+}
+
 model InventoryItem {
   id            String               @id @default(uuid())
   name          String
@@ -43,15 +50,17 @@ model InventoryItem {
   scrapedItemId String?
   manualLineId  String?
   fillEntryId   String?
-  ordinal       Int?                 
+  ordinal       Int?
   createdAt     DateTime             @default(now())
+
+  condition     InventoryCondition   @default(Loose)
 
   tags          InventoryItemTag[]
 
   @@index([scrapedItemId])
   @@index([manualLineId])
   @@index([fillEntryId])
-  @@unique([fillEntryId, ordinal])   
+  @@unique([fillEntryId, ordinal])
 }
 
 model InventoryItemTag {
@@ -76,7 +85,7 @@ model ManualPurchase {
   intlShippingTotalYen      Decimal  @default(0) @db.Decimal(12, 2)
   domesticShippingTotalYen  Decimal  @default(0) @db.Decimal(12, 2)
   customsTotalYen           Decimal  @default(0) @db.Decimal(12, 2)
-  subtotalYen               Decimal? @db.Decimal(12, 2) // optional declared subtotal
+  subtotalYen               Decimal? @db.Decimal(12, 2)
   notes                     String?
   createdAt                 DateTime @default(now())
 
@@ -103,7 +112,6 @@ enum FillSourceType {
   Manual
 }
 
-
 model InventoryFillSession {
   id               String         @id @default(uuid())
   sourceType       FillSourceType
@@ -111,7 +119,7 @@ model InventoryFillSession {
   manualPurchaseId String?
   customsTotalYen  Decimal        @default(0) @db.Decimal(12, 2)
   createdAt        DateTime       @default(now())
-  finalizedAt      DateTime?     
+  finalizedAt      DateTime?
 
   sourceItems      InventoryFillSourceItem[]
   entries          InventoryFillEntry[]
@@ -123,11 +131,9 @@ model InventoryFillSession {
 model InventoryFillSourceItem {
   id            String   @id @default(uuid())
   sessionId     String
-  scrapedItemId String?  // when ScrapedPackage
-  manualLineId  String?  // when Manual
+  scrapedItemId String?
+  manualLineId  String?
 
-  // percentage weights stored as integer parts-per-million (PPM). 100% = 1,000,000
-  // This is the source-item's share of the WHOLE package shipping
   shippingWeightPpm Int  @default(0)
 
   session       InventoryFillSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
@@ -145,14 +151,15 @@ model InventoryFillEntry {
   nameOverride      String?
   quantity          Int      @default(1)
 
-  // within the source item: these two ALSO use PPM
   priceWeightPpm    Int      @default(0)
   shippingWeightPpm Int      @default(0)
 
-  // tags chosen for this entry template (copied to each created InventoryItem)
+  // NEW: condition chosen at fill-time, copied to InventoryItem(s)
+  condition         InventoryCondition @default(Loose)
+
   entryTags         InventoryFillEntryTag[]
 
-  session           InventoryFillSession   @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  session           InventoryFillSession    @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   sourceItem        InventoryFillSourceItem @relation(fields: [sourceItemId], references: [id], onDelete: Cascade)
 
   @@index([sessionId])
@@ -165,21 +172,20 @@ model InventoryFillEntryTag {
   placementId String?
 
   entry   InventoryFillEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
-  tag     Tag                 @relation(fields: [tagId], references: [id], onDelete: Cascade)
+  tag     Tag                @relation(fields: [tagId], references: [id], onDelete: Cascade)
 
   @@id([entryId, tagId])
   @@index([tagId])
 }
-
 
 model Tag {
   id          String  @id @default(uuid())
   name        String
   description String?
 
-  placements TagPlacement[]
-  itemTags   InventoryItemTag[]
-  fillEntryTags InventoryFillEntryTag[]
+  placements      TagPlacement[]
+  itemTags        InventoryItemTag[]
+  fillEntryTags   InventoryFillEntryTag[]
 
   @@unique([name])
   @@index([name])
@@ -194,7 +200,6 @@ model TagPlacement {
   parent   TagPlacement?  @relation("TP_Children", fields: [parentPlacementId], references: [id])
   children TagPlacement[] @relation("TP_Children")
 
-  // back-relations for PlacementClosure (REQUIRED)
   asAncestor   PlacementClosure[] @relation("PC_Ancestor")
   asDescendant PlacementClosure[] @relation("PC_Descendant")
 
@@ -227,14 +232,14 @@ model ScrapedPackage {
   pageUrl String
 
   dateShipped        DateTime?
-  packageNumber      String    @unique // <- unique key
+  packageNumber      String    @unique
   intlTrackingNumber String?
   intlTrackingUrl    String?
 
   internationalShippingFeeYen Decimal? @db.Decimal(12, 2)
   domesticShippingFeeYen      Decimal? @db.Decimal(12, 2)
 
-  raw         Json? // original scraper blob
+  raw         Json?
   firstSeenAt DateTime @default(now())
   lastSeenAt  DateTime @default(now())
 
@@ -250,8 +255,8 @@ model ScrapedItem {
   id               String   @id @default(uuid())
   scrapedPackageId String
   orderNumber      String?
-  titleJa          String? // <- keep original
-  titleEn          String? // <- translated
+  titleJa          String?
+  titleEn          String?
   itemUrl          String?
   listingId        String?
   priceYen         Decimal? @db.Decimal(12, 2)

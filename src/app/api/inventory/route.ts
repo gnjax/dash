@@ -49,7 +49,7 @@ export async function GET(req: NextRequest) {
     }
 
     // Match any segment in placement chain
-    //   tags (name ~ q) -> placements -> closure descendants -> InventoryItemTag.placementId
+    // tags (name ~ q) -> placements -> closure descendants -> InventoryItemTag.placementId
     let itemIdsFromPlacementQuery: string[] = [];
     {
       const tagHits = await prisma.tag.findMany({
@@ -123,6 +123,7 @@ export async function GET(req: NextRequest) {
       manualLineId: true,
       fillEntryId: true,
       createdAt: true,
+      condition: true, // ✅ added
       tags: {
         select: {
           tag: { select: { id: true, name: true } },
@@ -198,7 +199,6 @@ export async function GET(req: NextRequest) {
   // Prices
   const scrapedIds = Array.from(new Set(allSessSourceItems.map(si => si.scrapedItemId).filter(Boolean) as string[]));
   const manualIds = Array.from(new Set(allSessSourceItems.map(si => si.manualLineId).filter(Boolean) as string[]));
-
   const scrapedItems = scrapedIds.length
     ? await prisma.scrapedItem.findMany({
         where: { id: { in: scrapedIds } },
@@ -217,7 +217,6 @@ export async function GET(req: NextRequest) {
   // Shipping & dates
   const scrapedPkgIds = Array.from(new Set(sessions.map(s => s.scrapedPackageId).filter(Boolean) as string[]));
   const manualPurchaseIds = Array.from(new Set(sessions.map(s => s.manualPurchaseId).filter(Boolean) as string[]));
-
   const scrapedPkgs = scrapedPkgIds.length
     ? await prisma.scrapedPackage.findMany({
         where: { id: { in: scrapedPkgIds } },
@@ -259,9 +258,10 @@ export async function GET(req: NextRequest) {
         ancestor: { select: { tag: { select: { name: true } } } },
       },
     });
+
     const byDesc = new Map<string, { depth: number; name: string }[]>();
     for (const c of closures) {
-      const nm = c.ancestor.tag?.name ?? '';
+      const nm = (c as any).ancestor.tag?.name ?? '';
       if (!nm) continue;
       const arr = byDesc.get(c.descendantPlacementId) ?? [];
       arr.push({ depth: c.depth, name: nm });
@@ -289,6 +289,7 @@ export async function GET(req: NextRequest) {
       rows.push({
         id: it.id,
         name: it.name,
+        condition: it.condition, // ✅ added
         tagChain: tagParts.join(' • '),
         fxDateISO: null,
         packageNumber: null,
@@ -369,6 +370,7 @@ export async function GET(req: NextRequest) {
     rows.push({
       id: it.id,
       name: it.name,
+      condition: it.condition, // ✅ added
       tagChain: tagParts.join(' • '),
       fxDateISO,
       packageNumber,

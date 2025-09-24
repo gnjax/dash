@@ -1,8 +1,8 @@
 # Codebase Summary
 
-> Generated: 2025-09-24T08:56:20.214Z
-> Commit: d53f09fb93bff33298dc7aa71d2868d69d9ce3f2
-> Date: 2025-09-24 00:53:09 +0200
+> Generated: 2025-09-24T10:03:05.021Z
+> Commit: 8b14f92e9da9f695861bb06540f2351137144679
+> Date: 2025-09-24 10:56:19 +0200
 > Remote: git@github.com:gnjax/dash.git
 
 This file concatenates important text/code files in the repo so a single raw URL can be shared.
@@ -8193,6 +8193,22 @@ CREATE INDEX "FxRate_base_quote_idx" ON "public"."FxRate"("base", "quote");
 
 ---
 
+## prisma/migrations/20250924092120_add_inventory_condition/migration.sql
+
+```sql
+-- CreateEnum
+CREATE TYPE "public"."InventoryCondition" AS ENUM ('Loose', 'Boxed', 'CIB', 'NIB');
+
+-- AlterTable
+ALTER TABLE "public"."InventoryFillEntry" ADD COLUMN     "condition" "public"."InventoryCondition" NOT NULL DEFAULT 'Loose';
+
+-- AlterTable
+ALTER TABLE "public"."InventoryItem" ADD COLUMN     "condition" "public"."InventoryCondition" NOT NULL DEFAULT 'Loose';
+
+```
+
+---
+
 ## prisma/migrations/migration_lock.toml
 
 ```toml
@@ -8217,10 +8233,10 @@ datasource db {
 }
 
 model FxRate {
-  date     DateTime   // UTC midnight of the rate day
-  base     String     // e.g. "JPY"
-  quote    String     // e.g. "EUR"
-  rate     Decimal    @db.Decimal(20, 10) // high precision cache
+  date     DateTime
+  base     String
+  quote    String
+  rate     Decimal    @db.Decimal(20, 10)
   source   String     @default("frankfurter")
   fetchedAt DateTime  @default(now())
 
@@ -8245,6 +8261,13 @@ enum InventoryOriginType {
   Manual
 }
 
+enum InventoryCondition {
+  Loose
+  Boxed
+  CIB
+  NIB
+}
+
 model InventoryItem {
   id            String               @id @default(uuid())
   name          String
@@ -8252,15 +8275,17 @@ model InventoryItem {
   scrapedItemId String?
   manualLineId  String?
   fillEntryId   String?
-  ordinal       Int?                 
+  ordinal       Int?
   createdAt     DateTime             @default(now())
+
+  condition     InventoryCondition   @default(Loose)
 
   tags          InventoryItemTag[]
 
   @@index([scrapedItemId])
   @@index([manualLineId])
   @@index([fillEntryId])
-  @@unique([fillEntryId, ordinal])   
+  @@unique([fillEntryId, ordinal])
 }
 
 model InventoryItemTag {
@@ -8285,7 +8310,7 @@ model ManualPurchase {
   intlShippingTotalYen      Decimal  @default(0) @db.Decimal(12, 2)
   domesticShippingTotalYen  Decimal  @default(0) @db.Decimal(12, 2)
   customsTotalYen           Decimal  @default(0) @db.Decimal(12, 2)
-  subtotalYen               Decimal? @db.Decimal(12, 2) // optional declared subtotal
+  subtotalYen               Decimal? @db.Decimal(12, 2)
   notes                     String?
   createdAt                 DateTime @default(now())
 
@@ -8312,7 +8337,6 @@ enum FillSourceType {
   Manual
 }
 
-
 model InventoryFillSession {
   id               String         @id @default(uuid())
   sourceType       FillSourceType
@@ -8320,7 +8344,7 @@ model InventoryFillSession {
   manualPurchaseId String?
   customsTotalYen  Decimal        @default(0) @db.Decimal(12, 2)
   createdAt        DateTime       @default(now())
-  finalizedAt      DateTime?     
+  finalizedAt      DateTime?
 
   sourceItems      InventoryFillSourceItem[]
   entries          InventoryFillEntry[]
@@ -8332,11 +8356,9 @@ model InventoryFillSession {
 model InventoryFillSourceItem {
   id            String   @id @default(uuid())
   sessionId     String
-  scrapedItemId String?  // when ScrapedPackage
-  manualLineId  String?  // when Manual
+  scrapedItemId String?
+  manualLineId  String?
 
-  // percentage weights stored as integer parts-per-million (PPM). 100% = 1,000,000
-  // This is the source-item's share of the WHOLE package shipping
   shippingWeightPpm Int  @default(0)
 
   session       InventoryFillSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
@@ -8354,14 +8376,15 @@ model InventoryFillEntry {
   nameOverride      String?
   quantity          Int      @default(1)
 
-  // within the source item: these two ALSO use PPM
   priceWeightPpm    Int      @default(0)
   shippingWeightPpm Int      @default(0)
 
-  // tags chosen for this entry template (copied to each created InventoryItem)
+  // NEW: condition chosen at fill-time, copied to InventoryItem(s)
+  condition         InventoryCondition @default(Loose)
+
   entryTags         InventoryFillEntryTag[]
 
-  session           InventoryFillSession   @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  session           InventoryFillSession    @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   sourceItem        InventoryFillSourceItem @relation(fields: [sourceItemId], references: [id], onDelete: Cascade)
 
   @@index([sessionId])
@@ -8374,21 +8397,20 @@ model InventoryFillEntryTag {
   placementId String?
 
   entry   InventoryFillEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
-  tag     Tag                 @relation(fields: [tagId], references: [id], onDelete: Cascade)
+  tag     Tag                @relation(fields: [tagId], references: [id], onDelete: Cascade)
 
   @@id([entryId, tagId])
   @@index([tagId])
 }
-
 
 model Tag {
   id          String  @id @default(uuid())
   name        String
   description String?
 
-  placements TagPlacement[]
-  itemTags   InventoryItemTag[]
-  fillEntryTags InventoryFillEntryTag[]
+  placements      TagPlacement[]
+  itemTags        InventoryItemTag[]
+  fillEntryTags   InventoryFillEntryTag[]
 
   @@unique([name])
   @@index([name])
@@ -8403,7 +8425,6 @@ model TagPlacement {
   parent   TagPlacement?  @relation("TP_Children", fields: [parentPlacementId], references: [id])
   children TagPlacement[] @relation("TP_Children")
 
-  // back-relations for PlacementClosure (REQUIRED)
   asAncestor   PlacementClosure[] @relation("PC_Ancestor")
   asDescendant PlacementClosure[] @relation("PC_Descendant")
 
@@ -8436,14 +8457,14 @@ model ScrapedPackage {
   pageUrl String
 
   dateShipped        DateTime?
-  packageNumber      String    @unique // <- unique key
+  packageNumber      String    @unique
   intlTrackingNumber String?
   intlTrackingUrl    String?
 
   internationalShippingFeeYen Decimal? @db.Decimal(12, 2)
   domesticShippingFeeYen      Decimal? @db.Decimal(12, 2)
 
-  raw         Json? // original scraper blob
+  raw         Json?
   firstSeenAt DateTime @default(now())
   lastSeenAt  DateTime @default(now())
 
@@ -8459,8 +8480,8 @@ model ScrapedItem {
   id               String   @id @default(uuid())
   scrapedPackageId String
   orderNumber      String?
-  titleJa          String? // <- keep original
-  titleEn          String? // <- translated
+  titleJa          String?
+  titleEn          String?
   itemUrl          String?
   listingId        String?
   priceYen         Decimal? @db.Decimal(12, 2)
@@ -8508,7 +8529,7 @@ export const dynamic = 'force-dynamic';
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { PPM_DENOM } from '@/lib/weights';
-import { PackageStatus } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 
 export async function POST(
   _req: NextRequest,
@@ -8517,24 +8538,11 @@ export async function POST(
   const { id } = await ctx.params;
 
   const result = await prisma.$transaction(async (db) => {
-    // 1) lock session by flipping finalizedAt if null
     const setFinal = await db.inventoryFillSession.updateMany({
       where: { id, finalizedAt: null },
       data: { finalizedAt: new Date() },
     });
-
     if (setFinal.count === 0) {
-      // already finalized → still ensure the scraped package is marked Processed
-      const sess = await db.inventoryFillSession.findUnique({
-        where: { id },
-        select: { sourceType: true, scrapedPackageId: true },
-      });
-      if (sess?.sourceType === 'ScrapedPackage' && sess.scrapedPackageId) {
-        await db.scrapedPackage.update({
-          where: { id: sess.scrapedPackageId },
-          data: { status: PackageStatus.Processed },
-        });
-      }
       return { created: 0, alreadyFinalized: true };
     }
 
@@ -8548,12 +8556,16 @@ export async function POST(
 
     const isScraped = session.sourceType === 'ScrapedPackage';
 
-    // package totals
     let intlShip = 0, domShip = 0, customs = Number(session.customsTotalYen ?? 0);
     if (isScraped) {
       const pkg = await db.scrapedPackage.findUnique({ where: { id: session.scrapedPackageId! } });
       intlShip = Number(pkg?.internationalShippingFeeYen ?? 0);
       domShip = Number(pkg?.domesticShippingFeeYen ?? 0);
+      // ✅ keep existing status update to Processed
+      await db.scrapedPackage.update({
+        where: { id: session.scrapedPackageId! },
+        data: { status: Prisma.PackageStatus.Processed },
+      });
     } else {
       const mp = await db.manualPurchase.findUnique({ where: { id: session.manualPurchaseId! } });
       intlShip = Number(mp?.intlShippingTotalYen ?? 0);
@@ -8561,7 +8573,6 @@ export async function POST(
     }
     const pkgShippingTotal = intlShip + domShip;
 
-    // load source prices/titles
     const priceByKey: Record<string, number> = {};
     const titleByKey: Record<string, string> = {};
     if (isScraped) {
@@ -8589,7 +8600,6 @@ export async function POST(
       return a + (priceByKey[key] ?? 0);
     }, 0);
 
-    // 2) Create items idempotently per entry using (fillEntryId, ordinal) uniqueness
     let created = 0;
 
     for (const si of session.sourceItems) {
@@ -8602,7 +8612,6 @@ export async function POST(
         const baseName = e.nameOverride ?? titleByKey[key] ?? '(untitled)';
         const originType = isScraped ? 'Scraped' : 'Manual';
 
-        // Insert N items with ordinals 1..qty (skip duplicates via unique)
         const rows = Array.from({ length: qty }, (_, i) => ({
           name: baseName,
           originType: originType as any,
@@ -8610,22 +8619,16 @@ export async function POST(
           manualLineId: si.manualLineId ?? null,
           fillEntryId: e.id,
           ordinal: i + 1,
+          condition: (e as any).condition ?? 'Loose', // ✅ NEW
         }));
 
-        // create items; duplicates (same fillEntryId, ordinal) are ignored
-        const result = await db.inventoryItem.createMany({
-          data: rows,
-          skipDuplicates: true,
-        });
-        created += result.count; // ✅ accurate number created this run
+        await db.inventoryItem.createMany({ data: rows, skipDuplicates: true });
 
-        // fetch ids of all items for this entry (for tagging)
         const items = await db.inventoryItem.findMany({
           where: { fillEntryId: e.id },
           select: { id: true, ordinal: true },
         });
 
-        // upsert first tag (with placement) for each item if present
         const t = e.entryTags[0];
         if (t && items.length) {
           await db.inventoryItemTag.createMany({
@@ -8637,15 +8640,10 @@ export async function POST(
             skipDuplicates: true,
           });
         }
-      }
-    }
 
-    // ✅ Mark scraped package as Processed when finalizing
-    if (isScraped && session.scrapedPackageId) {
-      await db.scrapedPackage.update({
-        where: { id: session.scrapedPackageId },
-        data: { status: PackageStatus.Processed },
-      });
+        const have = items.length;
+        if (have < qty) created += (qty - have);
+      }
     }
 
     return { created, alreadyFinalized: false };
@@ -8661,7 +8659,6 @@ export async function POST(
 ## src/app/api/fill-sessions/[id]/route.ts
 
 ```ts
-// src/app/api/fill-sessions/[id]/route.ts
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
@@ -8686,7 +8683,6 @@ export async function GET(
 ) {
   const { id } = await ctx.params;
 
-  // get session with source items + entries (+ tags)
   const session = await prisma.inventoryFillSession.findUnique({
     where: { id },
     include: {
@@ -8697,10 +8693,9 @@ export async function GET(
 
   const isScraped = session.sourceType === 'ScrapedPackage';
 
-  // title/price (+ listingId) map for source items (scraped items or manual lines)
-  const titlePriceMap: Record<string, { title: string; priceYen: number; listingId: string | null }> = {};
+  type Meta = { title: string; priceYen: number; listingId?: string | null };
+  const metaByKey: Record<string, Meta> = {};
 
-  // shipping totals + shipping date for FX
   let intlShip = 0;
   let domShip = 0;
   let fxDateISO: string | null = null;
@@ -8713,16 +8708,16 @@ export async function GET(
     if (!pkg) return NextResponse.json({ error: 'Scraped package not found' }, { status: 404 });
 
     for (const it of pkg.items) {
-      titlePriceMap[it.id] = {
+      metaByKey[it.id] = {
         title: it.titleEn ?? it.titleJa ?? '(untitled)',
         priceYen: toNum(it.priceYen ?? 0),
-        listingId: it.listingId ?? null,   // ✅ include listingId for /api/thumb/[listingId]
+        listingId: it.listingId ?? null,
       };
     }
 
     intlShip = toNum(pkg.internationalShippingFeeYen ?? 0);
     domShip = toNum(pkg.domesticShippingFeeYen ?? 0);
-    fxDateISO = pkg.dateShipped ? pkg.dateShipped.toISOString().slice(0, 10) : null; // ✅ shipping date for FX
+    fxDateISO = pkg.dateShipped ? pkg.dateShipped.toISOString().slice(0, 10) : null;
   } else {
     const mp = await prisma.manualPurchase.findUnique({
       where: { id: session.manualPurchaseId! },
@@ -8731,19 +8726,18 @@ export async function GET(
     if (!mp) return NextResponse.json({ error: 'Manual purchase not found' }, { status: 404 });
 
     for (const ln of mp.lines) {
-      titlePriceMap[ln.id] = {
+      metaByKey[ln.id] = {
         title: ln.title ?? '(untitled)',
         priceYen: toNum(ln.priceYen ?? 0),
-        listingId: null, // manual lines have no listingId
+        listingId: null,
       };
     }
 
+    // keeping your manual totals field names
     intlShip = toNum((mp as any).intlShippingTotalYen ?? 0);
     domShip = toNum((mp as any).domShippingTotalYen ?? 0);
-    // no natural shipped date for manual; leave fxDateISO = null (UI will fall back to today)
   }
 
-  // shape the response
   return NextResponse.json({
     session: {
       id: session.id,
@@ -8756,19 +8750,17 @@ export async function GET(
       domShip,
       packageShippingTotal: intlShip + domShip,
     },
-    // ✅ preferred FX date for UI (YYYY-MM-DD or null)
     fxDateISO,
-
     sourceItems: session.sourceItems.map((si) => {
       const key = si.scrapedItemId ?? si.manualLineId!;
-      const meta = titlePriceMap[key] || { title: '(missing)', priceYen: 0, listingId: null };
+      const meta = metaByKey[key] || { title: '(missing)', priceYen: 0, listingId: null };
       return {
         id: si.id,
         scrapedItemId: si.scrapedItemId,
         manualLineId: si.manualLineId,
+        listingId: meta.listingId ?? null, // ✅ keep thumbs working
         title: meta.title,
         priceYen: meta.priceYen,
-        listingId: meta.listingId,            // ✅ expose listingId to the UI
         shippingWeightPpm: si.shippingWeightPpm,
         entries: si.entries.map(e => ({
           id: e.id,
@@ -8777,7 +8769,8 @@ export async function GET(
           priceWeightPpm: e.priceWeightPpm,
           shippingWeightPpm: e.shippingWeightPpm,
           tagId: e.entryTags[0]?.tagId ?? null,
-          tagPlacementId: e.entryTags[0]?.placementId ?? null, // ✅ first tag chosen
+          tagPlacementId: e.entryTags[0]?.placementId ?? null,
+          condition: e.condition, // ✅ NEW
         })),
       };
     }),
@@ -8794,7 +8787,7 @@ export async function GET(
 //   sourceItems: [{ id, shippingWeightPpm }],
 //   entriesUpsert: [{
 //     id?, sourceItemId, nameOverride, quantity, priceWeightPpm, shippingWeightPpm,
-//     tagId, tagPlacementId
+//     tagId, tagPlacementId, condition
 //   }]
 // }
 export async function PATCH(
@@ -8805,7 +8798,6 @@ export async function PATCH(
   const body = await req.json();
 
   await prisma.$transaction(async (db) => {
-    // 1) update customs
     if (typeof body.customsTotalYen === 'number' && Number.isFinite(body.customsTotalYen)) {
       await db.inventoryFillSession.update({
         where: { id },
@@ -8813,7 +8805,6 @@ export async function PATCH(
       });
     }
 
-    // 2) update source item shipping weights
     if (Array.isArray(body.sourceItems)) {
       for (const si of body.sourceItems) {
         const ppm = Math.max(0, Math.min(PPM_DENOM, (si.shippingWeightPpm | 0)));
@@ -8824,7 +8815,6 @@ export async function PATCH(
       }
     }
 
-    // 3) upsert entries + tags
     const keepIds = new Set<string>();
     if (Array.isArray(body.entriesUpsert)) {
       for (const e of body.entriesUpsert) {
@@ -8835,13 +8825,13 @@ export async function PATCH(
           quantity: Math.max(1, Number(e.quantity || 1)) | 0,
           priceWeightPpm: Math.max(0, Math.min(PPM_DENOM, (e.priceWeightPpm | 0))),
           shippingWeightPpm: Math.max(0, Math.min(PPM_DENOM, (e.shippingWeightPpm | 0))),
-        };
+          condition: e.condition ?? 'Loose', // ✅ NEW
+        } as const;
 
         let entryId: string;
         if (e.id) {
           entryId = String(e.id);
           await db.inventoryFillEntry.update({ where: { id: entryId }, data });
-          // replace tag link
           await db.inventoryFillEntryTag.deleteMany({ where: { entryId } });
         } else {
           const created = await db.inventoryFillEntry.create({ data });
@@ -8860,14 +8850,12 @@ export async function PATCH(
         }
       }
 
-      // prune entries not present anymore
       const existing = await db.inventoryFillEntry.findMany({
         where: { sessionId: id },
         select: { id: true },
       });
       const toDelete = existing.map(x => x.id).filter(dbId => !keepIds.has(dbId));
       if (toDelete.length) {
-        // tags cascade via onDelete: Cascade, but deleteMany here is fine either way
         await db.inventoryFillEntry.deleteMany({ where: { id: { in: toDelete } } });
       }
     }
@@ -9204,7 +9192,7 @@ export async function GET(req: NextRequest) {
     }
 
     // Match any segment in placement chain
-    //   tags (name ~ q) -> placements -> closure descendants -> InventoryItemTag.placementId
+    // tags (name ~ q) -> placements -> closure descendants -> InventoryItemTag.placementId
     let itemIdsFromPlacementQuery: string[] = [];
     {
       const tagHits = await prisma.tag.findMany({
@@ -9278,6 +9266,7 @@ export async function GET(req: NextRequest) {
       manualLineId: true,
       fillEntryId: true,
       createdAt: true,
+      condition: true, // ✅ added
       tags: {
         select: {
           tag: { select: { id: true, name: true } },
@@ -9353,7 +9342,6 @@ export async function GET(req: NextRequest) {
   // Prices
   const scrapedIds = Array.from(new Set(allSessSourceItems.map(si => si.scrapedItemId).filter(Boolean) as string[]));
   const manualIds = Array.from(new Set(allSessSourceItems.map(si => si.manualLineId).filter(Boolean) as string[]));
-
   const scrapedItems = scrapedIds.length
     ? await prisma.scrapedItem.findMany({
         where: { id: { in: scrapedIds } },
@@ -9372,7 +9360,6 @@ export async function GET(req: NextRequest) {
   // Shipping & dates
   const scrapedPkgIds = Array.from(new Set(sessions.map(s => s.scrapedPackageId).filter(Boolean) as string[]));
   const manualPurchaseIds = Array.from(new Set(sessions.map(s => s.manualPurchaseId).filter(Boolean) as string[]));
-
   const scrapedPkgs = scrapedPkgIds.length
     ? await prisma.scrapedPackage.findMany({
         where: { id: { in: scrapedPkgIds } },
@@ -9414,9 +9401,10 @@ export async function GET(req: NextRequest) {
         ancestor: { select: { tag: { select: { name: true } } } },
       },
     });
+
     const byDesc = new Map<string, { depth: number; name: string }[]>();
     for (const c of closures) {
-      const nm = c.ancestor.tag?.name ?? '';
+      const nm = (c as any).ancestor.tag?.name ?? '';
       if (!nm) continue;
       const arr = byDesc.get(c.descendantPlacementId) ?? [];
       arr.push({ depth: c.depth, name: nm });
@@ -9444,6 +9432,7 @@ export async function GET(req: NextRequest) {
       rows.push({
         id: it.id,
         name: it.name,
+        condition: it.condition, // ✅ added
         tagChain: tagParts.join(' • '),
         fxDateISO: null,
         packageNumber: null,
@@ -9524,6 +9513,7 @@ export async function GET(req: NextRequest) {
     rows.push({
       id: it.id,
       name: it.name,
+      condition: it.condition, // ✅ added
       tagChain: tagParts.join(' • '),
       fxDateISO,
       packageNumber,
@@ -10580,9 +10570,11 @@ body {
 import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import WeightSliders, { type WeightRow } from '@/components/WeightSliders';
-import { percentToPpm, ppmToPercent, PPM_DENOM } from '@/lib/weights';
+import { ppmToPercent, PPM_DENOM } from '@/lib/weights';
 import { getJpyToEurRate, yenToEuro } from '@/lib/fx.client';
 import SingleTagPicker from '@/components/SingleTagPicker';
+
+type Condition = 'Loose' | 'Boxed' | 'CIB' | 'NIB';
 
 type SourceEntry = {
   id?: string;
@@ -10592,13 +10584,13 @@ type SourceEntry = {
   shippingWeightPpm: number;
   tagId: string | null;
   tagPlacementId: string | null;
+  condition: Condition; // ✅ NEW
 };
 
 type SourceItem = {
   id: string;
   scrapedItemId?: string | null;
   manualLineId?: string | null;
-  /** Optional listing id (needed for /api/thumb/[listingId]) */
   listingId?: string | null;
   title: string;
   priceYen: number;
@@ -10621,52 +10613,12 @@ type SessionPayload = {
 
 type TagFlat = { id: string; name: string; description: string | null };
 
-// Build thumbnail URL if we have a listingId; otherwise null
 function thumbUrlFor(item: SourceItem): string | null {
   const lid = (item as any)?.listingId;
   if (lid && typeof lid === 'string' && lid.length > 0) {
     return `/api/thumb/${encodeURIComponent(lid)}`;
   }
   return null;
-}
-
-/** Floating image preview that follows the cursor on hover */
-function HoverFloat(props: { url: string | null; size?: number; children: React.ReactNode }) {
-  const { url, size = 320, children } = props;
-  const [show, setShow] = useState(false);
-  const [pos, setPos] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
-
-  return (
-    <>
-      <span
-        className="inline-flex items-center"
-        onMouseEnter={() => url && setShow(true)}
-        onMouseLeave={() => setShow(false)}
-        onMouseMove={(e) => setPos({ x: e.clientX, y: e.clientY })}
-        style={{ cursor: url ? 'zoom-in' : undefined }}
-      >
-        {children}
-      </span>
-      {url && show && (
-        <div
-          className="fixed z-[9999] pointer-events-none"
-          style={{ left: pos.x + 12, top: pos.y + 12 }}
-        >
-          <div className="rounded-lg border border-white/10 bg-black/90 p-1 shadow-2xl">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={url}
-              alt=""
-              width={size}
-              height={size}
-              className="block object-contain max-w-none"
-              loading="eager"
-            />
-          </div>
-        </div>
-      )}
-    </>
-  );
 }
 
 function fmtEUR(v: number | null | undefined) {
@@ -10692,18 +10644,15 @@ export default function InventoryFillerPage() {
   const [tags, setTags] = useState<TagFlat[]>([]);
   const [busy, setBusy] = useState(false);
 
-  // FX state
   const [fxRate, setFxRate] = useState<number | null>(null);
   const [fxDateISO, setFxDateISO] = useState<string>('');
 
-  // Customs input: user edits in EUR; we convert to JPY for preview/save
   const [customsEuro, setCustomsEuro] = useState<string>('');
-  const [customsDirty, setCustomsDirty] = useState<boolean>(false); // ✅ prevents overwriting user input
+  const [customsDirty, setCustomsDirty] = useState<boolean>(false);
 
   const sessionId = sp.get('sessionId');
   const packageId = sp.get('packageId');
 
-  // Create/reuse session from packageId
   useEffect(() => {
     (async () => {
       if (!sessionId && packageId) {
@@ -10721,7 +10670,6 @@ export default function InventoryFillerPage() {
     })();
   }, [sessionId, packageId, router]);
 
-  // Load session + tags + FX by package shipping date
   useEffect(() => {
     (async () => {
       if (!sessionId) return;
@@ -10734,7 +10682,6 @@ export default function InventoryFillerPage() {
       setData(j);
       setTags(await fetchTags());
 
-      // Prefer backend-provided date, else other fields, else today
       const shippedISO =
         (j?.fxDateISO && String(j.fxDateISO)) ||
         (j?.scrapedPackage?.dateShipped && new Date(j.scrapedPackage.dateShipped).toISOString().slice(0,10)) ||
@@ -10761,22 +10708,19 @@ export default function InventoryFillerPage() {
 
   const finalized = !!data?.session.finalizedAt;
 
-  // Seed customsEuro from DB **only when user hasn't edited yet**
   useEffect(() => {
     if (!data || !fxRate) return;
-    if (customsDirty) return; // ✅ don't clobber user's input
+    if (customsDirty) return;
     const jpy = Number(data.session.customsTotalYen || 0);
     const eur = yenToEuro(jpy, fxRate);
     setCustomsEuro(Number.isFinite(eur) ? eur.toFixed(2) : '');
   }, [data, fxRate, customsDirty]);
 
-  // Computed JPY value used for previews (current input if available, else saved)
   const customsTotalJPYPreview = useMemo(() => {
     const savedJPY = Number(data?.session.customsTotalYen || 0);
     if (fxRate && isFinite(fxRate)) {
       const eur = Number(customsEuro || '0');
       if (Number.isFinite(eur)) {
-        // round to 2 decimals to match storage style
         return Math.round((eur / fxRate) * 100) / 100;
       }
     }
@@ -10803,6 +10747,7 @@ export default function InventoryFillerPage() {
             shippingWeightPpm: e.shippingWeightPpm,
             tagId: e.tagId,
             tagPlacementId: e.tagPlacementId,
+            condition: e.condition, // ✅ NEW
           }))
         ),
       };
@@ -10814,9 +10759,7 @@ export default function InventoryFillerPage() {
       const j = await res.json();
       if (!res.ok) throw new Error(j.error || 'Save failed');
 
-      // ✅ Keep local state in sync so it doesn't "snap back"
       setData(d => d ? { ...d, session: { ...d.session, customsTotalYen: customsJPY } } as SessionPayload : d);
-      setCustomsDirty(false);
     } catch (e: any) {
       alert(e.message || 'Save failed');
     } finally {
@@ -10901,7 +10844,7 @@ export default function InventoryFillerPage() {
                 inputMode="decimal"
                 placeholder="0.00"
                 value={customsEuro}
-                onChange={e => { setCustomsDirty(true); setCustomsEuro(e.target.value); }} // ✅ mark as dirty
+                onChange={e => { setCustomsDirty(true); setCustomsEuro(e.target.value); }}
                 disabled={finalized}
               />
               <span className="text-xs text-gray-500">
@@ -10910,7 +10853,6 @@ export default function InventoryFillerPage() {
             </div>
           </div>
 
-          {/* FX badge */}
           <div className="sm:col-span-2 lg:col-span-4 flex justify-end text-xs">
             <div className="rounded-lg border border-white/10 px-2 py-1">
               FX JPY→EUR {fxDateISO ? `@ ${fxDateISO}` : ''}: <span className="font-medium">{fxRate ? fxRate.toFixed(6) : '—'}</span>
@@ -10933,14 +10875,7 @@ export default function InventoryFillerPage() {
           help="Distribute the total package shipping (intl + domestic) across items. Locks keep a row fixed while others redistribute."
           rows={data.sourceItems.map(s => ({
             id: s.id,
-            // Wrap the label with a hover preview of the item image
-            label: (
-              <HoverFloat url={thumbUrlFor(s)} size={320}>
-                <span className="cursor-zoom-in underline decoration-dotted decoration-white/30">
-                  {s.title}
-                </span>
-              </HoverFloat>
-            ) as any, // cast keeps TS happy if label is typed as string
+            label: s.title,
             ppm: s.shippingWeightPpm,
             rightHint: (
               <span>
@@ -10974,7 +10909,7 @@ export default function InventoryFillerPage() {
             setData(d => !d ? d : ({ ...d, sourceItems: d.sourceItems.map(x => x.id === s.id ? next : x) }));
           }}
           packageShippingTotal={data.packageTotals.packageShippingTotal}
-          customsTotalPreview={customsTotalJPYPreview}  // ✅ live preview value
+          customsTotalPreview={customsTotalJPYPreview}
           packageSubtotal={packageSubtotal}
           allTags={tags}
           disabled={finalized}
@@ -10982,7 +10917,6 @@ export default function InventoryFillerPage() {
         />
       ))}
 
-      {/* actions */}
       <div className="flex gap-3">
         <button className="btn btn-outline" onClick={onSave} disabled={busy || finalized}>
           {busy ? 'Saving…' : 'Save'}
@@ -10999,7 +10933,7 @@ function SourceItemCard(props: {
   item: SourceItem;
   onChange: (next: SourceItem) => void;
   packageShippingTotal: number;
-  customsTotalPreview: number; // ✅ use preview (EUR input converted to JPY)
+  customsTotalPreview: number;
   packageSubtotal: number;
   allTags: TagFlat[];
   disabled?: boolean;
@@ -11045,24 +10979,22 @@ function SourceItemCard(props: {
     return Math.round(customsTotalPreview * sourceShare * (e.priceWeightPpm / PPM_DENOM));
   };
 
+  const conditionOptions: Condition[] = ['Loose', 'Boxed', 'CIB', 'NIB'];
+
   return (
     <div className="card p-4 space-y-4">
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-start gap-3">
-          {/* Thumbnail (uses /api/thumb/[listingId]) with hover preview */}
           {(() => {
             const url = thumbUrlFor(item);
             return url ? (
-              <HoverFloat url={url} size={320}>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={url}
-                  alt={item.title || 'thumbnail'}
-                  className="w-16 h-16 rounded-md object-cover border border-white/10"
-                  loading="lazy"
-                  referrerPolicy="no-referrer"
-                />
-              </HoverFloat>
+              <img
+                src={url}
+                alt={item.title || 'thumbnail'}
+                className="w-16 h-16 rounded-md object-cover border border-white/10"
+                loading="lazy"
+                referrerPolicy="no-referrer"
+              />
             ) : (
               <div className="w-16 h-16 rounded-md border border-white/10 bg-white/5 grid place-items-center text-[10px] text-gray-500">
                 no img
@@ -11095,6 +11027,7 @@ function SourceItemCard(props: {
                 shippingWeightPpm: 0,
                 tagId: null,
                 tagPlacementId: null,
+                condition: 'Loose', // ✅ default
               };
               onChange({ ...item, entries: [...item.entries, newEntry] });
             }}
@@ -11105,7 +11038,6 @@ function SourceItemCard(props: {
         </div>
       </div>
 
-      {/* Price split within this source item */}
       {priceRows.length > 0 ? (
         <WeightSliders
           title="Entries → price split"
@@ -11128,7 +11060,6 @@ function SourceItemCard(props: {
         <div className="rounded-xl border border-white/10 p-3 text-xs text-gray-400">Add entries to split price and shipping.</div>
       )}
 
-      {/* Shipping split within this source item */}
       {shipRows.length > 0 && (
         <WeightSliders
           title="Entries → shipping split"
@@ -11152,7 +11083,7 @@ function SourceItemCard(props: {
       {/* Entries editor */}
       <div className="rounded-lg border border-white/10 divide-y divide-white/10">
         {item.entries.map((e, i) => (
-          <div key={e.id || i} className="p-3 grid md:grid-cols-6 gap-3 items-center">
+          <div key={e.id || i} className="p-3 grid md:grid-cols-7 gap-3 items-center">
             <div className="md:col-span-2">
               <input
                 className="field w-full"
@@ -11167,11 +11098,10 @@ function SourceItemCard(props: {
                   onChange={(sel) => {
                     const tagId = sel?.tagId ?? null;
                     const placementId = sel?.placementId ?? null;
-                    // Auto-fill name only if blank: prefer tag description, then name
                     let nextName = e.nameOverride ?? '';
                     const isBlank = !nextName || nextName.trim().length === 0;
                     if (isBlank && tagId) {
-                      const t = allTags.find(t => t.id === tagId);
+                      const t = props.allTags.find(t => t.id === tagId);
                       const candidate = (t?.description?.trim() || t?.name || '').trim();
                       if (candidate) nextName = candidate;
                     }
@@ -11184,6 +11114,22 @@ function SourceItemCard(props: {
                   }}
                 />
               </div>
+            </div>
+
+            {/* NEW: Condition */}
+            <div>
+              <label className="block text-xs text-gray-400">Condition</label>
+              <select
+                className="field"
+                value={e.condition}
+                onChange={ev => onChange({
+                  ...item,
+                  entries: item.entries.map(x => x === e ? { ...e, condition: ev.target.value as Condition } : x),
+                })}
+                disabled={disabled}
+              >
+                {conditionOptions.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
             </div>
 
             <div>
@@ -11229,7 +11175,7 @@ function SourceItemCard(props: {
                 {(() => {
                   const basePartJPY = Math.round(item.priceYen * (e.priceWeightPpm / PPM_DENOM));
                   const shipPartJPY = Math.round(sourceShipAlloc * (e.shippingWeightPpm / PPM_DENOM));
-                  const customsPartJPY = entryCustomsPreview(e); // already in JPY
+                  const customsPartJPY = entryCustomsPreview(e);
                   const totalJPY = basePartJPY + shipPartJPY + customsPartJPY;
                   const perUnitJPY = Math.round(totalJPY / Math.max(1, e.quantity));
                   return (
@@ -11242,7 +11188,7 @@ function SourceItemCard(props: {
               </div>
             </div>
 
-            <div className="md:col-span-6 flex justify-end">
+            <div className="md:col-span-7 flex justify-end">
               <button
                 className="btn btn-outline text-xs"
                 onClick={() => onChange({ ...item, entries: item.entries.filter(x => x !== e) })}
@@ -11274,8 +11220,10 @@ import { getJpyToEurRate, yenToEuro } from '@/lib/fx.client';
 type Row = {
   id: string;
   name: string;
-  tagChain: string;                 // e.g. "Foo (Root > Branch > Leaf) • Bar (...)"
-  fxDateISO: string | null;         // date used for JPY->EUR conversion (YYYY-MM-DD)
+  // ✅ NEW: condition is returned by the API (Loose | Boxed | CIB | NIB)
+  condition: string;
+  tagChain: string; // e.g. "Foo (Root > Branch > Leaf) • Bar (...)"
+  fxDateISO: string | null; // date used for JPY->EUR conversion (YYYY-MM-DD)
   packageNumber: string | null;
   purchaseDateISO: string | null;
   jpy: {
@@ -11306,13 +11254,13 @@ export default function InventoryPage() {
   // stacked filters (chips)
   const [filters, setFilters] = useState<string[]>([]);
   const [draft, setDraft] = useState('');
-
   const [rows, setRows] = useState<Row[]>([]);
   const [cursor, setCursor] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   // cache of JPY->EUR rates by date
   const [rates, setRates] = useState<Record<string, number>>({});
+
   const todayISO = useMemo(() => new Date().toISOString().slice(0, 10), []);
 
   // URL sync (optional but nice; keeps filters in the address bar)
@@ -11382,6 +11330,7 @@ export default function InventoryPage() {
     const sp = new URLSearchParams(window.location.search);
     const qs = sp.getAll('q').map(s => s.trim()).filter(Boolean);
     if (qs.length) setFilters(qs);
+
     // then load
     load({ reset: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -11389,7 +11338,7 @@ export default function InventoryPage() {
 
   // reload when filters change
   useEffect(() => {
-    // skip first run where rows just loaded; if you prefer immediate reload, keep as is:
+    // immediate reload
     load({ reset: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filters.join('\u0001')]);
@@ -11413,88 +11362,100 @@ export default function InventoryPage() {
 
   return (
     <div className="space-y-4">
-      <div className="card p-3">
-        <div className="text-sm font-medium">Inventory</div>
-        <div className="mt-1 text-xs text-gray-400">
-          Per-unit prices computed from session splits and FX on package date.
-        </div>
+      <h1 className="text-xl font-semibold">Inventory</h1>
+      <p className="text-xs text-gray-400">
+        Per-unit prices computed from session splits and FX on package date.
+      </p>
 
-        {/* Stacked - filters */}
-        <div className="mt-3 flex flex-wrap items-center gap-2">
+      {/* Stacked filters */}
+      <div className="rounded-lg border border-white/10 p-2">
+        <div className="flex flex-wrap items-center gap-2">
           {filters.map(f => (
             <span
               key={f}
-              className="inline-flex items-center gap-2 rounded-lg border px-2 py-1 text-xs"
-              style={{ background: 'var(--color-surface)', borderColor: 'var(--color-border)' }}
+              className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-2 py-1 text-xs"
             >
-              <span className="font-mono">{f}</span>
-              <button className="hover:text-red-400" onClick={() => removeFilter(f)} title="Remove filter">✕</button>
+              {f}
+              <button
+                className="hover:text-red-300"
+                onClick={() => removeFilter(f)}
+                title="Remove filter"
+              >
+                ✕
+              </button>
             </span>
           ))}
+
           <input
-            className="field min-w-[220px] flex-1"
-            placeholder={filters.length ? 'Add another filter…' : 'Search by name, tag, package…'}
+            className="field min-w-[14rem] flex-1"
+            placeholder="Search by name, tag, or package # …"
             value={draft}
             onChange={e => setDraft(e.target.value)}
             onKeyDown={e => {
-              if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); addFilter(); }
+              if (e.key === 'Enter' || e.key === ',') {
+                e.preventDefault();
+                addFilter();
+              }
               if (e.key === 'Escape') setDraft('');
             }}
           />
           <button className="btn btn-outline" onClick={addFilter}>Add</button>
           {filters.length > 0 && (
-            <button className="btn btn-outline" onClick={() => setFilters([])}>Clear</button>
+            <button className="btn btn-outline" onClick={() => setFilters([])}>
+              Clear
+            </button>
           )}
         </div>
       </div>
 
-      <div className="card p-0 overflow-hidden">
-        <table className="min-w-full text-sm">
-          <thead className="bg-white/5">
-            <tr className="text-left text-gray-400">
-              <th className="px-3 py-2">Name</th>
-              <th className="px-3 py-2">Tags</th>
-              <th className="px-3 py-2 text-right">Item price</th>
-              <th className="px-3 py-2 text-right">Real price</th>
-              <th className="px-3 py-2">Package #</th>
-              <th className="px-3 py-2">Purchase date</th>
+      {/* Table */}
+      <div className="rounded-lg border border-white/10 overflow-hidden">
+        <table className="w-full text-sm">
+          <thead className="bg-white/5 text-xs text-gray-400">
+            <tr>
+              <th className="px-3 py-2 text-left">Name</th>
+              <th className="px-3 py-2 text-left">Tags</th>
+              {/* ✅ NEW */}
+              <th className="px-3 py-2 text-left">Condition</th>
+              <th className="px-3 py-2 text-left">Item price</th>
+              <th className="px-3 py-2 text-left">Real price</th>
+              <th className="px-3 py-2 text-left">Package #</th>
+              <th className="px-3 py-2 text-left">Purchase date</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-white/10"> 
+          <tbody>
             {rows.map((r) => {
               const baseEUR = eurFor(r.jpy.basePerUnit, r.fxDateISO);
               const totalEUR = eurFor(r.jpy.totalPerUnit, r.fxDateISO);
               return (
-                <tr key={r.id}>
+                <tr key={r.id} className="border-t border-white/10">
                   <td className="px-3 py-2">{r.name || '—'}</td>
-                  <td className="px-3 py-2 text-gray-300">{r.tagChain || '—'}</td>
+                  <td className="px-3 py-2">{r.tagChain || '—'}</td>
+                  {/* ✅ NEW */}
+                  <td className="px-3 py-2">{r.condition || '—'}</td>
 
-                  <td className="px-3 py-2 text-right">
+                  <td className="px-3 py-2">
                     <div>{fmtEUR(baseEUR)}</div>
                     <div className="text-xs text-gray-500">{fmtJPY(r.jpy.basePerUnit)}</div>
                   </td>
-
-                  <td className="px-3 py-2 text-right">
+                  <td className="px-3 py-2">
                     <div>{fmtEUR(totalEUR)}</div>
                     <div className="text-xs text-gray-500">{fmtJPY(r.jpy.totalPerUnit)}</div>
                   </td>
-
-                  <td className="px-3 py-2 font-mono">{r.packageNumber ?? '—'}</td>
+                  <td className="px-3 py-2">{r.packageNumber ?? '—'}</td>
                   <td className="px-3 py-2">{r.purchaseDateISO ?? '—'}</td>
                 </tr>
               );
             })}
-
-            {rows.length === 0 && !busy && (
-              <tr>
-                <td colSpan={6} className="px-3 py-6 text-center text-gray-400">No items yet.</td>
-              </tr>
-            )}
           </tbody>
         </table>
 
-        <div className="p-3 flex justify-between items-center">
-          <div className="text-xs text-gray-400">{rows.length} items</div>
+        {rows.length === 0 && !busy && (
+          <div className="p-6 text-center text-sm text-gray-400">No items yet.</div>
+        )}
+
+        <div className="flex items-center justify-between px-3 py-2 text-xs text-gray-400">
+          <div>{rows.length} items</div>
           <button
             className="btn btn-outline"
             onClick={() => load({ cursor })}

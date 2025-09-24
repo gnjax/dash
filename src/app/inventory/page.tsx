@@ -7,8 +7,10 @@ import { getJpyToEurRate, yenToEuro } from '@/lib/fx.client';
 type Row = {
   id: string;
   name: string;
-  tagChain: string;                 // e.g. "Foo (Root > Branch > Leaf) • Bar (...)"
-  fxDateISO: string | null;         // date used for JPY->EUR conversion (YYYY-MM-DD)
+  // ✅ NEW: condition is returned by the API (Loose | Boxed | CIB | NIB)
+  condition: string;
+  tagChain: string; // e.g. "Foo (Root > Branch > Leaf) • Bar (...)"
+  fxDateISO: string | null; // date used for JPY->EUR conversion (YYYY-MM-DD)
   packageNumber: string | null;
   purchaseDateISO: string | null;
   jpy: {
@@ -39,13 +41,13 @@ export default function InventoryPage() {
   // stacked filters (chips)
   const [filters, setFilters] = useState<string[]>([]);
   const [draft, setDraft] = useState('');
-
   const [rows, setRows] = useState<Row[]>([]);
   const [cursor, setCursor] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   // cache of JPY->EUR rates by date
   const [rates, setRates] = useState<Record<string, number>>({});
+
   const todayISO = useMemo(() => new Date().toISOString().slice(0, 10), []);
 
   // URL sync (optional but nice; keeps filters in the address bar)
@@ -115,6 +117,7 @@ export default function InventoryPage() {
     const sp = new URLSearchParams(window.location.search);
     const qs = sp.getAll('q').map(s => s.trim()).filter(Boolean);
     if (qs.length) setFilters(qs);
+
     // then load
     load({ reset: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -122,7 +125,7 @@ export default function InventoryPage() {
 
   // reload when filters change
   useEffect(() => {
-    // skip first run where rows just loaded; if you prefer immediate reload, keep as is:
+    // immediate reload
     load({ reset: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filters.join('\u0001')]);
@@ -146,88 +149,100 @@ export default function InventoryPage() {
 
   return (
     <div className="space-y-4">
-      <div className="card p-3">
-        <div className="text-sm font-medium">Inventory</div>
-        <div className="mt-1 text-xs text-gray-400">
-          Per-unit prices computed from session splits and FX on package date.
-        </div>
+      <h1 className="text-xl font-semibold">Inventory</h1>
+      <p className="text-xs text-gray-400">
+        Per-unit prices computed from session splits and FX on package date.
+      </p>
 
-        {/* Stacked - filters */}
-        <div className="mt-3 flex flex-wrap items-center gap-2">
+      {/* Stacked filters */}
+      <div className="rounded-lg border border-white/10 p-2">
+        <div className="flex flex-wrap items-center gap-2">
           {filters.map(f => (
             <span
               key={f}
-              className="inline-flex items-center gap-2 rounded-lg border px-2 py-1 text-xs"
-              style={{ background: 'var(--color-surface)', borderColor: 'var(--color-border)' }}
+              className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-2 py-1 text-xs"
             >
-              <span className="font-mono">{f}</span>
-              <button className="hover:text-red-400" onClick={() => removeFilter(f)} title="Remove filter">✕</button>
+              {f}
+              <button
+                className="hover:text-red-300"
+                onClick={() => removeFilter(f)}
+                title="Remove filter"
+              >
+                ✕
+              </button>
             </span>
           ))}
+
           <input
-            className="field min-w-[220px] flex-1"
-            placeholder={filters.length ? 'Add another filter…' : 'Search by name, tag, package…'}
+            className="field min-w-[14rem] flex-1"
+            placeholder="Search by name, tag, or package # …"
             value={draft}
             onChange={e => setDraft(e.target.value)}
             onKeyDown={e => {
-              if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); addFilter(); }
+              if (e.key === 'Enter' || e.key === ',') {
+                e.preventDefault();
+                addFilter();
+              }
               if (e.key === 'Escape') setDraft('');
             }}
           />
           <button className="btn btn-outline" onClick={addFilter}>Add</button>
           {filters.length > 0 && (
-            <button className="btn btn-outline" onClick={() => setFilters([])}>Clear</button>
+            <button className="btn btn-outline" onClick={() => setFilters([])}>
+              Clear
+            </button>
           )}
         </div>
       </div>
 
-      <div className="card p-0 overflow-hidden">
-        <table className="min-w-full text-sm">
-          <thead className="bg-white/5">
-            <tr className="text-left text-gray-400">
-              <th className="px-3 py-2">Name</th>
-              <th className="px-3 py-2">Tags</th>
-              <th className="px-3 py-2 text-right">Item price</th>
-              <th className="px-3 py-2 text-right">Real price</th>
-              <th className="px-3 py-2">Package #</th>
-              <th className="px-3 py-2">Purchase date</th>
+      {/* Table */}
+      <div className="rounded-lg border border-white/10 overflow-hidden">
+        <table className="w-full text-sm">
+          <thead className="bg-white/5 text-xs text-gray-400">
+            <tr>
+              <th className="px-3 py-2 text-left">Name</th>
+              <th className="px-3 py-2 text-left">Tags</th>
+              {/* ✅ NEW */}
+              <th className="px-3 py-2 text-left">Condition</th>
+              <th className="px-3 py-2 text-left">Item price</th>
+              <th className="px-3 py-2 text-left">Real price</th>
+              <th className="px-3 py-2 text-left">Package #</th>
+              <th className="px-3 py-2 text-left">Purchase date</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-white/10"> 
+          <tbody>
             {rows.map((r) => {
               const baseEUR = eurFor(r.jpy.basePerUnit, r.fxDateISO);
               const totalEUR = eurFor(r.jpy.totalPerUnit, r.fxDateISO);
               return (
-                <tr key={r.id}>
+                <tr key={r.id} className="border-t border-white/10">
                   <td className="px-3 py-2">{r.name || '—'}</td>
-                  <td className="px-3 py-2 text-gray-300">{r.tagChain || '—'}</td>
+                  <td className="px-3 py-2">{r.tagChain || '—'}</td>
+                  {/* ✅ NEW */}
+                  <td className="px-3 py-2">{r.condition || '—'}</td>
 
-                  <td className="px-3 py-2 text-right">
+                  <td className="px-3 py-2">
                     <div>{fmtEUR(baseEUR)}</div>
                     <div className="text-xs text-gray-500">{fmtJPY(r.jpy.basePerUnit)}</div>
                   </td>
-
-                  <td className="px-3 py-2 text-right">
+                  <td className="px-3 py-2">
                     <div>{fmtEUR(totalEUR)}</div>
                     <div className="text-xs text-gray-500">{fmtJPY(r.jpy.totalPerUnit)}</div>
                   </td>
-
-                  <td className="px-3 py-2 font-mono">{r.packageNumber ?? '—'}</td>
+                  <td className="px-3 py-2">{r.packageNumber ?? '—'}</td>
                   <td className="px-3 py-2">{r.purchaseDateISO ?? '—'}</td>
                 </tr>
               );
             })}
-
-            {rows.length === 0 && !busy && (
-              <tr>
-                <td colSpan={6} className="px-3 py-6 text-center text-gray-400">No items yet.</td>
-              </tr>
-            )}
           </tbody>
         </table>
 
-        <div className="p-3 flex justify-between items-center">
-          <div className="text-xs text-gray-400">{rows.length} items</div>
+        {rows.length === 0 && !busy && (
+          <div className="p-6 text-center text-sm text-gray-400">No items yet.</div>
+        )}
+
+        <div className="flex items-center justify-between px-3 py-2 text-xs text-gray-400">
+          <div>{rows.length} items</div>
           <button
             className="btn btn-outline"
             onClick={() => load({ cursor })}
