@@ -1,8 +1,8 @@
 # Codebase Summary
 
-> Generated: 2025-09-24T21:07:44.133Z
-> Commit: 6f7be9a4c2947bd881d2172ec72bb63983a56198
-> Date: 2025-09-24 12:53:20 +0200
+> Generated: 2025-09-24T22:03:59.993Z
+> Commit: d64d4b546b892127fbb9d2304dfb5e80b79f0824
+> Date: 2025-09-24 23:07:43 +0200
 > Remote: git@github.com:gnjax/dash.git
 
 This file concatenates important text/code files in the repo so a single raw URL can be shared.
@@ -14337,6 +14337,9 @@ async function main() {
         '**/.vercel/**',
         '**/.idea/**',
         '**/.vscode/**',
+         '**/.sql/**',
+         '**/package-lock.json/**',
+         '**/debug-final.html/**',
         OUT_FILE,
       ],
       ignoreInitial: true,
