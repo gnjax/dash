@@ -4,7 +4,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import WeightSliders, { type WeightRow } from '@/components/WeightSliders';
-import { ppmToPercent, PPM_DENOM } from '@/lib/weights';
+import { percentToPpm, ppmToPercent, PPM_DENOM } from '@/lib/weights';
 import { getJpyToEurRate, yenToEuro } from '@/lib/fx.client';
 import SingleTagPicker from '@/components/SingleTagPicker';
 
@@ -18,13 +18,14 @@ type SourceEntry = {
   shippingWeightPpm: number;
   tagId: string | null;
   tagPlacementId: string | null;
-  condition: Condition; // ✅ NEW
+  condition?: Condition; // ✅ new (defaults to 'Loose' in UI)
 };
 
 type SourceItem = {
   id: string;
   scrapedItemId?: string | null;
   manualLineId?: string | null;
+  /** Optional listing id (needed for /api/thumb/[listingId]) */
   listingId?: string | null;
   title: string;
   priceYen: number;
@@ -47,12 +48,52 @@ type SessionPayload = {
 
 type TagFlat = { id: string; name: string; description: string | null };
 
+// Build thumbnail URL if we have a listingId; otherwise null
 function thumbUrlFor(item: SourceItem): string | null {
   const lid = (item as any)?.listingId;
   if (lid && typeof lid === 'string' && lid.length > 0) {
     return `/api/thumb/${encodeURIComponent(lid)}`;
   }
   return null;
+}
+
+/** Floating image preview that follows the cursor on hover */
+function HoverFloat(props: { url: string | null; size?: number; children: React.ReactNode }) {
+  const { url, size = 320, children } = props;
+  const [show, setShow] = useState(false);
+  const [pos, setPos] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+
+  return (
+    <>
+      <span
+        className="inline-flex items-center"
+        onMouseEnter={() => url && setShow(true)}
+        onMouseLeave={() => setShow(false)}
+        onMouseMove={(e) => setPos({ x: e.clientX, y: e.clientY })}
+        style={{ cursor: url ? 'zoom-in' : undefined }}
+      >
+        {children}
+      </span>
+      {url && show && (
+        <div
+          className="fixed z-[9999] pointer-events-none"
+          style={{ left: pos.x + 12, top: pos.y + 12 }}
+        >
+          <div className="rounded-lg border border-white/10 bg-black/90 p-1 shadow-2xl">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={url}
+              alt=""
+              width={size}
+              height={size}
+              className="block object-contain max-w-none"
+              loading="eager"
+            />
+          </div>
+        </div>
+      )}
+    </>
+  );
 }
 
 function fmtEUR(v: number | null | undefined) {
@@ -78,15 +119,18 @@ export default function InventoryFillerPage() {
   const [tags, setTags] = useState<TagFlat[]>([]);
   const [busy, setBusy] = useState(false);
 
+  // FX state
   const [fxRate, setFxRate] = useState<number | null>(null);
   const [fxDateISO, setFxDateISO] = useState<string>('');
 
+  // Customs input: user edits in EUR; we convert to JPY for preview/save
   const [customsEuro, setCustomsEuro] = useState<string>('');
-  const [customsDirty, setCustomsDirty] = useState<boolean>(false);
+  const [customsDirty, setCustomsDirty] = useState<boolean>(false); // ✅ prevents overwriting user input
 
   const sessionId = sp.get('sessionId');
   const packageId = sp.get('packageId');
 
+  // Create/reuse session from packageId
   useEffect(() => {
     (async () => {
       if (!sessionId && packageId) {
@@ -104,6 +148,7 @@ export default function InventoryFillerPage() {
     })();
   }, [sessionId, packageId, router]);
 
+  // Load session + tags + FX by package shipping date
   useEffect(() => {
     (async () => {
       if (!sessionId) return;
@@ -116,6 +161,7 @@ export default function InventoryFillerPage() {
       setData(j);
       setTags(await fetchTags());
 
+      // Prefer backend-provided date, else other fields, else today
       const shippedISO =
         (j?.fxDateISO && String(j.fxDateISO)) ||
         (j?.scrapedPackage?.dateShipped && new Date(j.scrapedPackage.dateShipped).toISOString().slice(0,10)) ||
@@ -142,19 +188,22 @@ export default function InventoryFillerPage() {
 
   const finalized = !!data?.session.finalizedAt;
 
+  // Seed customsEuro from DB **only when user hasn't edited yet**
   useEffect(() => {
     if (!data || !fxRate) return;
-    if (customsDirty) return;
+    if (customsDirty) return; // ✅ don't clobber user's input
     const jpy = Number(data.session.customsTotalYen || 0);
     const eur = yenToEuro(jpy, fxRate);
     setCustomsEuro(Number.isFinite(eur) ? eur.toFixed(2) : '');
   }, [data, fxRate, customsDirty]);
 
+  // Computed JPY value used for previews (current input if available, else saved)
   const customsTotalJPYPreview = useMemo(() => {
     const savedJPY = Number(data?.session.customsTotalYen || 0);
     if (fxRate && isFinite(fxRate)) {
       const eur = Number(customsEuro || '0');
       if (Number.isFinite(eur)) {
+        // round to 2 decimals to match storage style
         return Math.round((eur / fxRate) * 100) / 100;
       }
     }
@@ -181,7 +230,7 @@ export default function InventoryFillerPage() {
             shippingWeightPpm: e.shippingWeightPpm,
             tagId: e.tagId,
             tagPlacementId: e.tagPlacementId,
-            condition: e.condition, // ✅ NEW
+            condition: (e.condition ?? 'Loose') as Condition, // ✅ send condition
           }))
         ),
       };
@@ -193,7 +242,9 @@ export default function InventoryFillerPage() {
       const j = await res.json();
       if (!res.ok) throw new Error(j.error || 'Save failed');
 
+      // ✅ Keep local state in sync so it doesn't "snap back"
       setData(d => d ? { ...d, session: { ...d.session, customsTotalYen: customsJPY } } as SessionPayload : d);
+      setCustomsDirty(false);
     } catch (e: any) {
       alert(e.message || 'Save failed');
     } finally {
@@ -278,7 +329,7 @@ export default function InventoryFillerPage() {
                 inputMode="decimal"
                 placeholder="0.00"
                 value={customsEuro}
-                onChange={e => { setCustomsDirty(true); setCustomsEuro(e.target.value); }}
+                onChange={e => { setCustomsDirty(true); setCustomsEuro(e.target.value); }} // ✅ mark as dirty
                 disabled={finalized}
               />
               <span className="text-xs text-gray-500">
@@ -287,6 +338,7 @@ export default function InventoryFillerPage() {
             </div>
           </div>
 
+          {/* FX badge */}
           <div className="sm:col-span-2 lg:col-span-4 flex justify-end text-xs">
             <div className="rounded-lg border border-white/10 px-2 py-1">
               FX JPY→EUR {fxDateISO ? `@ ${fxDateISO}` : ''}: <span className="font-medium">{fxRate ? fxRate.toFixed(6) : '—'}</span>
@@ -309,7 +361,14 @@ export default function InventoryFillerPage() {
           help="Distribute the total package shipping (intl + domestic) across items. Locks keep a row fixed while others redistribute."
           rows={data.sourceItems.map(s => ({
             id: s.id,
-            label: s.title,
+            // Wrap the label with a hover preview of the item image
+            label: (
+              <HoverFloat url={thumbUrlFor(s)} size={320}>
+                <span className="cursor-zoom-in underline decoration-dotted decoration-white/30">
+                  {s.title}
+                </span>
+              </HoverFloat>
+            ) as any, // cast keeps TS happy if label is typed as string
             ppm: s.shippingWeightPpm,
             rightHint: (
               <span>
@@ -343,7 +402,7 @@ export default function InventoryFillerPage() {
             setData(d => !d ? d : ({ ...d, sourceItems: d.sourceItems.map(x => x.id === s.id ? next : x) }));
           }}
           packageShippingTotal={data.packageTotals.packageShippingTotal}
-          customsTotalPreview={customsTotalJPYPreview}
+          customsTotalPreview={customsTotalJPYPreview}  // ✅ live preview value
           packageSubtotal={packageSubtotal}
           allTags={tags}
           disabled={finalized}
@@ -351,6 +410,7 @@ export default function InventoryFillerPage() {
         />
       ))}
 
+      {/* actions */}
       <div className="flex gap-3">
         <button className="btn btn-outline" onClick={onSave} disabled={busy || finalized}>
           {busy ? 'Saving…' : 'Save'}
@@ -367,7 +427,7 @@ function SourceItemCard(props: {
   item: SourceItem;
   onChange: (next: SourceItem) => void;
   packageShippingTotal: number;
-  customsTotalPreview: number;
+  customsTotalPreview: number; // ✅ use preview (EUR input converted to JPY)
   packageSubtotal: number;
   allTags: TagFlat[];
   disabled?: boolean;
@@ -413,22 +473,24 @@ function SourceItemCard(props: {
     return Math.round(customsTotalPreview * sourceShare * (e.priceWeightPpm / PPM_DENOM));
   };
 
-  const conditionOptions: Condition[] = ['Loose', 'Boxed', 'CIB', 'NIB'];
-
   return (
     <div className="card p-4 space-y-4">
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-start gap-3">
+          {/* Thumbnail (uses /api/thumb/[listingId]) with hover preview */}
           {(() => {
             const url = thumbUrlFor(item);
             return url ? (
-              <img
-                src={url}
-                alt={item.title || 'thumbnail'}
-                className="w-16 h-16 rounded-md object-cover border border-white/10"
-                loading="lazy"
-                referrerPolicy="no-referrer"
-              />
+              <HoverFloat url={url} size={320}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={url}
+                  alt={item.title || 'thumbnail'}
+                  className="w-16 h-16 rounded-md object-cover border border-white/10"
+                  loading="lazy"
+                  referrerPolicy="no-referrer"
+                />
+              </HoverFloat>
             ) : (
               <div className="w-16 h-16 rounded-md border border-white/10 bg-white/5 grid place-items-center text-[10px] text-gray-500">
                 no img
@@ -472,6 +534,7 @@ function SourceItemCard(props: {
         </div>
       </div>
 
+      {/* Price split within this source item */}
       {priceRows.length > 0 ? (
         <WeightSliders
           title="Entries → price split"
@@ -494,6 +557,7 @@ function SourceItemCard(props: {
         <div className="rounded-xl border border-white/10 p-3 text-xs text-gray-400">Add entries to split price and shipping.</div>
       )}
 
+      {/* Shipping split within this source item */}
       {shipRows.length > 0 && (
         <WeightSliders
           title="Entries → shipping split"
@@ -532,10 +596,11 @@ function SourceItemCard(props: {
                   onChange={(sel) => {
                     const tagId = sel?.tagId ?? null;
                     const placementId = sel?.placementId ?? null;
+                    // Auto-fill name only if blank: prefer tag description, then name
                     let nextName = e.nameOverride ?? '';
                     const isBlank = !nextName || nextName.trim().length === 0;
                     if (isBlank && tagId) {
-                      const t = props.allTags.find(t => t.id === tagId);
+                      const t = allTags.find(t => t.id === tagId);
                       const candidate = (t?.description?.trim() || t?.name || '').trim();
                       if (candidate) nextName = candidate;
                     }
@@ -548,22 +613,6 @@ function SourceItemCard(props: {
                   }}
                 />
               </div>
-            </div>
-
-            {/* NEW: Condition */}
-            <div>
-              <label className="block text-xs text-gray-400">Condition</label>
-              <select
-                className="field"
-                value={e.condition}
-                onChange={ev => onChange({
-                  ...item,
-                  entries: item.entries.map(x => x === e ? { ...e, condition: ev.target.value as Condition } : x),
-                })}
-                disabled={disabled}
-              >
-                {conditionOptions.map(c => <option key={c} value={c}>{c}</option>)}
-              </select>
             </div>
 
             <div>
@@ -579,6 +628,27 @@ function SourceItemCard(props: {
                 })}
                 disabled={disabled}
               />
+            </div>
+
+            {/* ✅ Condition selector (kept compact) */}
+            <div>
+              <label className="block text-xs text-gray-400">Condition</label>
+              <select
+                className="field w-28"
+                value={e.condition ?? 'Loose'}
+                onChange={ev =>
+                  onChange({
+                    ...item,
+                    entries: item.entries.map(x => x === e ? { ...e, condition: ev.target.value as Condition } : x),
+                  })
+                }
+                disabled={disabled}
+              >
+                <option value="Loose">Loose</option>
+                <option value="Boxed">Boxed</option>
+                <option value="CIB">CIB</option>
+                <option value="NIB">NIB</option>
+              </select>
             </div>
 
             <div>
@@ -609,7 +679,7 @@ function SourceItemCard(props: {
                 {(() => {
                   const basePartJPY = Math.round(item.priceYen * (e.priceWeightPpm / PPM_DENOM));
                   const shipPartJPY = Math.round(sourceShipAlloc * (e.shippingWeightPpm / PPM_DENOM));
-                  const customsPartJPY = entryCustomsPreview(e);
+                  const customsPartJPY = entryCustomsPreview(e); // already in JPY
                   const totalJPY = basePartJPY + shipPartJPY + customsPartJPY;
                   const perUnitJPY = Math.round(totalJPY / Math.max(1, e.quantity));
                   return (

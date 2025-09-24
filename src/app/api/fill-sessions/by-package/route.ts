@@ -1,3 +1,4 @@
+// src/app/api/fill-sessions/by-package/route.ts
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
@@ -6,27 +7,20 @@ import { prisma } from '@/lib/prisma';
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
-  const scrapedPackageId = searchParams.get('scrapedPackageId');
-  const manualPurchaseId = searchParams.get('manualPurchaseId');
-
-  if (!scrapedPackageId && !manualPurchaseId) {
-    return NextResponse.json({ error: 'Provide scrapedPackageId or manualPurchaseId' }, { status: 400 });
+  const pkgId = searchParams.get('packageId') ?? searchParams.get('scrapedPackageId');
+  if (!pkgId) {
+    return NextResponse.json({ error: 'packageId is required' }, { status: 400 });
   }
 
-  const where = scrapedPackageId ? { scrapedPackageId } : { manualPurchaseId };
-
-  // Prefer most recently finalized; otherwise most recent by id as a fallback.
-  const session = await prisma.inventoryFillSession.findFirst({
-    where,
-    orderBy: [
-      { finalizedAt: 'desc' },
-      { id: 'desc' }, // fallback ordering if finalizedAt is null/identical
-    ],
+  const sess = await prisma.inventoryFillSession.findFirst({
+    where: { sourceType: 'ScrapedPackage', scrapedPackageId: pkgId },
+    orderBy: { createdAt: 'desc' }, // latest one
     select: { id: true, finalizedAt: true },
   });
 
-  return NextResponse.json({
-    sessionId: session?.id ?? null,
-    finalizedAt: session?.finalizedAt ?? null,
-  });
+  if (!sess) {
+    return NextResponse.json({ error: 'not_found' }, { status: 404 });
+  }
+
+  return NextResponse.json({ sessionId: sess.id, finalized: !!sess.finalizedAt });
 }

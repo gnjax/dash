@@ -1,8 +1,8 @@
 'use client';
 import Link from 'next/link';
-import type { ScrapedPackageRow } from '../scraped-packages.client';
 import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import type { ScrapedPackageRow } from '../scraped-packages.client';
 
 function ItemsHover({ names }: { names: string[] }) {
   const [open, setOpen] = useState(false);
@@ -32,13 +32,15 @@ function ItemsHover({ names }: { names: string[] }) {
 }
 
 export default function ScrapedPackageCard({ pkg }: { pkg: ScrapedPackageRow }) {
+  const router = useRouter();
   const itemNames = useMemo(() => pkg.items.map(i => i.title || '').filter(Boolean), [pkg.items]);
 
   const [status, setStatus] = useState(pkg.status);
   const [saving, setSaving] = useState(false);
+  const [opening, setOpening] = useState(false);
+
   const isBlacklisted = status === 'Blacklist';
   const isProcessed = status === 'Processed';
-  const router = useRouter();
 
   async function toggleBlacklist() {
     if (saving) return;
@@ -61,25 +63,36 @@ export default function ScrapedPackageCard({ pkg }: { pkg: ScrapedPackageRow }) 
     }
   }
 
-  async function viewOrProceed() {
-    if (!isProcessed) {
-      // Not processed yet → create/reuse and proceed
-      router.push(`/inventory-filler?packageId=${pkg.id}`);
-      return;
-    }
-
-    // Processed → look up existing session id and open it (read-only after finalize)
+  async function openSessionForPackage() {
+    if (opening) return;
+    setOpening(true);
     try {
-      const res = await fetch(`/api/fill-sessions/by-package?scrapedPackageId=${encodeURIComponent(pkg.id)}`, { cache: 'no-store' });
-      const j = await res.json();
-      if (res.ok && j.sessionId) {
+      // 1) Try to find an existing session for this package
+      const findRes = await fetch(`/api/fill-sessions/by-package?packageId=${encodeURIComponent(pkg.id)}`, { cache: 'no-store' });
+      if (findRes.ok) {
+        const j = await findRes.json();
         router.push(`/inventory-filler?sessionId=${j.sessionId}`);
-      } else {
-        // fallback (shouldn't normally happen)
-        router.push(`/inventory-filler?packageId=${pkg.id}`);
+        return;
       }
-    } catch {
-      router.push(`/inventory-filler?packageId=${pkg.id}`);
+
+      // 2) If none found and package is not Processed, create one
+      if (!isProcessed) {
+        const createRes = await fetch('/api/fill-sessions', {
+          method: 'POST',
+          body: JSON.stringify({ sourceType: 'ScrapedPackage', scrapedPackageId: pkg.id }),
+        });
+        const cj = await createRes.json();
+        if (!createRes.ok) throw new Error(cj.error || 'Failed to create session');
+        router.push(`/inventory-filler?sessionId=${cj.sessionId}`);
+        return;
+      }
+
+      // 3) If Processed and still no session, inform
+      alert('No existing session found for this processed package.');
+    } catch (e: any) {
+      alert(e?.message || 'Failed to open session');
+    } finally {
+      setOpening(false);
     }
   }
 
@@ -116,9 +129,12 @@ export default function ScrapedPackageCard({ pkg }: { pkg: ScrapedPackageRow }) 
         {/* thumbnails */}
         <div className="grid grid-cols-3 md:grid-cols-4 gap-2">
           {pkg.items.slice(0, 8).map((it, i) => {
-            const href = it.listingId ? `https://buyee.jp/item/jdirectitems/auction/${it.listingId}` : undefined;
+            const href = it.listingId
+              ? `https://buyee.jp/item/jdirectitems/auction/${it.listingId}`
+              : undefined;
             const img = it.listingId ? `/api/thumb/${it.listingId}` : '/placeholder-item.png';
             const el = (
+              // eslint-disable-next-line @next/next/no-img-element
               <img
                 src={img}
                 alt={it.title || ''}
@@ -147,13 +163,22 @@ export default function ScrapedPackageCard({ pkg }: { pkg: ScrapedPackageRow }) 
           <button
             onClick={toggleBlacklist}
             disabled={saving}
-            className={isBlacklisted ? 'btn bg-red-600 hover:bg-red-500 disabled:opacity-50' : 'btn  disabled:opacity-50'}
+            className={
+              isBlacklisted
+                ? 'btn bg-red-600 hover:bg-red-500 disabled:opacity-50'
+                : 'btn disabled:opacity-50'
+            }
             title={isBlacklisted ? 'Click to unblacklist (back to To-do)' : 'Blacklist this package'}
           >
             {isBlacklisted ? 'Blacklisted' : 'Blacklist'}
           </button>
 
-          <button onClick={viewOrProceed} className="btn btn-success">
+          <button
+            onClick={openSessionForPackage}
+            disabled={opening}
+            className="btn btn-success cursor-pointer disabled:opacity-50"
+            title={isProcessed ? 'View existing fill session' : 'Start or resume fill session'}
+          >
             {isProcessed ? 'View session' : 'Proceed'}
           </button>
         </div>
