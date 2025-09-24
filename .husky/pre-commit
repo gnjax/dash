@@ -3,3 +3,5 @@
 
 npm run build:summary
 git add docs/codebase-summary.md
+node src/scripts/generate-raw-index.mjs || exit 1
+git add docs/ai-index.md
