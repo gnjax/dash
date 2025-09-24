@@ -1,8 +1,8 @@
 # Codebase Summary
 
-> Generated: 2025-09-24T10:53:20.254Z
-> Commit: 1a9145748fa53662eda74812cdea4992b2eb49b6
-> Date: 2025-09-24 12:03:04 +0200
+> Generated: 2025-09-24T21:07:44.133Z
+> Commit: 6f7be9a4c2947bd881d2172ec72bb63983a56198
+> Date: 2025-09-24 12:53:20 +0200
 > Remote: git@github.com:gnjax/dash.git
 
 This file concatenates important text/code files in the repo so a single raw URL can be shared.
@@ -10716,21 +10716,29 @@ export default function InventoryFillerPage() {
 
   // Create/reuse session from packageId
   useEffect(() => {
-    (async () => {
-      if (!sessionId && packageId) {
-        const res = await fetch('/api/fill-sessions', {
-          method: 'POST',
-          body: JSON.stringify({ sourceType: 'ScrapedPackage', scrapedPackageId: packageId }),
-        });
-        const j = await res.json();
-        if (res.ok) {
-          router.replace(`/inventory-filler?sessionId=${j.sessionId}`);
-        } else {
-          alert(j.error || 'Failed to start session');
-        }
+  (async () => {
+    if (!sessionId && packageId) {
+      // 1) try existing
+      const r = await fetch(`/api/fill-sessions/by-package?packageId=${encodeURIComponent(packageId)}`, { cache: 'no-store' });
+      if (r.ok) {
+        const j = await r.json();
+        router.replace(`/inventory-filler?sessionId=${j.sessionId}`);
+        return;
       }
-    })();
-  }, [sessionId, packageId, router]);
+      // 2) else create new
+      const res = await fetch('/api/fill-sessions', {
+        method: 'POST',
+        body: JSON.stringify({ sourceType: 'ScrapedPackage', scrapedPackageId: packageId }),
+      });
+      const j = await res.json();
+      if (res.ok) {
+        router.replace(`/inventory-filler?sessionId=${j.sessionId}`);
+      } else {
+        alert(j.error || 'Failed to start session');
+      }
+    }
+  })();
+}, [sessionId, packageId, router]);
 
   // Load session + tags + FX by package shipping date
   useEffect(() => {

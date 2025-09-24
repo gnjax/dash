@@ -132,21 +132,29 @@ export default function InventoryFillerPage() {
 
   // Create/reuse session from packageId
   useEffect(() => {
-    (async () => {
-      if (!sessionId && packageId) {
-        const res = await fetch('/api/fill-sessions', {
-          method: 'POST',
-          body: JSON.stringify({ sourceType: 'ScrapedPackage', scrapedPackageId: packageId }),
-        });
-        const j = await res.json();
-        if (res.ok) {
-          router.replace(`/inventory-filler?sessionId=${j.sessionId}`);
-        } else {
-          alert(j.error || 'Failed to start session');
-        }
+  (async () => {
+    if (!sessionId && packageId) {
+      // 1) try existing
+      const r = await fetch(`/api/fill-sessions/by-package?packageId=${encodeURIComponent(packageId)}`, { cache: 'no-store' });
+      if (r.ok) {
+        const j = await r.json();
+        router.replace(`/inventory-filler?sessionId=${j.sessionId}`);
+        return;
       }
-    })();
-  }, [sessionId, packageId, router]);
+      // 2) else create new
+      const res = await fetch('/api/fill-sessions', {
+        method: 'POST',
+        body: JSON.stringify({ sourceType: 'ScrapedPackage', scrapedPackageId: packageId }),
+      });
+      const j = await res.json();
+      if (res.ok) {
+        router.replace(`/inventory-filler?sessionId=${j.sessionId}`);
+      } else {
+        alert(j.error || 'Failed to start session');
+      }
+    }
+  })();
+}, [sessionId, packageId, router]);
 
   // Load session + tags + FX by package shipping date
   useEffect(() => {
