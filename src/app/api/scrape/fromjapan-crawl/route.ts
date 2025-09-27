@@ -3,11 +3,9 @@ import { prisma } from '@/lib/prisma';
 import { scrapeFromJapanShippedList } from '@/scrapers/fromjapan';
 import { translateJaToEn } from '@/lib/translate';
 
-function buildPageUrl(page: number): string {
-  // FromJapan shipped history page; page param TBD later.
-  // We keep the builder so it's trivial to add pagination later.
-  if (page <= 1) return 'https://www.fromjapan.co.jp/japan/en/member/history/ship/list';
-  return `https://www.fromjapan.co.jp/japan/en/member/history/ship/list?page=${page}`;
+// Always use base list URL; paging is done via POST { currentPage } inside the scraper.
+function baseUrl(): string {
+  return 'https://www.fromjapan.co.jp/japan/en/member/history/ship/list';
 }
 
 export const dynamic = 'force-dynamic';
@@ -18,8 +16,8 @@ export async function POST(req: Request) {
 
   try {
     for (let pageNum = Number(startPage); pageNum < Number(startPage) + Number(maxPages); pageNum++) {
-      const url = buildPageUrl(pageNum);
-      const { packages } = await scrapeFromJapanShippedList(url);
+      const url = baseUrl();
+      const { packages } = await scrapeFromJapanShippedList(url, pageNum);
       pagesCrawled++;
 
       if (!packages.length) { stopReason = 'empty_page'; break; }
@@ -47,8 +45,8 @@ export async function POST(req: Request) {
           update: {
             pageUrl: url,
             dateShipped: p.dateShipped ? new Date(p.dateShipped) : null,
-            intlTrackingNumber: p.trackingNumbers?.[0] || null,   // single tracking per package entry
-            intlTrackingUrl: null, // FJ detail URL not required here; can add later
+            intlTrackingNumber: p.trackingNumbers?.[0] || null,
+            intlTrackingUrl: null,
             internationalShippingFeeYen: p.internationalShippingFeeYen ?? null,
             domesticShippingFeeYen: p.domesticShippingFeeYen ?? null,
             raw: p,
@@ -57,7 +55,7 @@ export async function POST(req: Request) {
           create: {
             source: 'fromjapan',
             pageUrl: url,
-            packageNumber: p.packageNumber, // unique (includes #1/#2 for multi-pack)
+            packageNumber: p.packageNumber,
             dateShipped: p.dateShipped ? new Date(p.dateShipped) : null,
             intlTrackingNumber: p.trackingNumbers?.[0] || null,
             intlTrackingUrl: null,
@@ -68,7 +66,7 @@ export async function POST(req: Request) {
           select: { id: true, packageNumber: true },
         });
 
-        // Replace items for this package
+        // Replace items (idempotent)
         await prisma.scrapedItem.deleteMany({ where: { scrapedPackageId: up.id } });
         if (p.items?.length) {
           await prisma.scrapedItem.createMany({

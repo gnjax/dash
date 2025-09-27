@@ -7,10 +7,9 @@ import { getJpyToEurRate, yenToEuro } from '@/lib/fx.client';
 type Row = {
   id: string;
   name: string;
-  // ✅ NEW: condition is returned by the API (Loose | Boxed | CIB | NIB)
-  condition: string;
-  tagChain: string; // e.g. "Foo (Root > Branch > Leaf) • Bar (...)"
-  fxDateISO: string | null; // date used for JPY->EUR conversion (YYYY-MM-DD)
+  condition: string; // Loose | Boxed | CIB | NIB
+  tagChain: string;  // "Foo (Root > Branch > Leaf) • Bar (…)”
+  fxDateISO: string | null;
   packageNumber: string | null;
   purchaseDateISO: string | null;
   jpy: {
@@ -38,19 +37,23 @@ function fmtJPY(v: number | null | undefined) {
 }
 
 export default function InventoryPage() {
-  // stacked filters (chips)
+  // filters
   const [filters, setFilters] = useState<string[]>([]);
   const [draft, setDraft] = useState('');
+
+  // data
   const [rows, setRows] = useState<Row[]>([]);
   const [cursor, setCursor] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  // cache of JPY->EUR rates by date
-  const [rates, setRates] = useState<Record<string, number>>({});
+  // selection
+  const [selected, setSelected] = useState<Record<string, boolean>>({});
 
+  // FX cache
+  const [rates, setRates] = useState<Record<string, number>>({});
   const todayISO = useMemo(() => new Date().toISOString().slice(0, 10), []);
 
-  // URL sync (optional but nice; keeps filters in the address bar)
+  // URL sync for filters
   useEffect(() => {
     const params = new URLSearchParams();
     for (const f of filters) params.append('q', f);
@@ -74,7 +77,7 @@ export default function InventoryPage() {
           const r = await getJpyToEurRate(d);
           return [d, r] as const;
         } catch {
-          return [d, NaN] as const; // avoid re-fetch loops; UI will show €0.00
+          return [d, NaN] as const;
         }
       }),
     );
@@ -102,8 +105,10 @@ export default function InventoryPage() {
       const page = j.items || [];
       setRows(prev => (reset ? page : [...prev, ...page]));
       setCursor(j.nextCursor ?? null);
-
       await ensureRates(page.map(x => x.fxDateISO));
+
+      // if we reset, clear selection (only selected on current page)
+      if (reset) setSelected({});
     } catch (e: any) {
       alert(e.message || 'Load failed');
     } finally {
@@ -111,21 +116,17 @@ export default function InventoryPage() {
     }
   }
 
-  // initial load
+  // initial load + hydrate filters from URL
   useEffect(() => {
-    // hydrate filters from URL (?q=...&q=...)
     const sp = new URLSearchParams(window.location.search);
     const qs = sp.getAll('q').map(s => s.trim()).filter(Boolean);
     if (qs.length) setFilters(qs);
-
-    // then load
     load({ reset: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // reload when filters change
   useEffect(() => {
-    // immediate reload
     load({ reset: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filters.join('\u0001')]);
@@ -136,15 +137,37 @@ export default function InventoryPage() {
     if (!filters.includes(v)) setFilters(prev => [...prev, v]);
     setDraft('');
   }
-  function removeFilter(f: string) {
-    setFilters(prev => prev.filter(x => x !== f));
-  }
+  function removeFilter(f: string) { setFilters(prev => prev.filter(x => x !== f)); }
 
   function eurFor(jpy: number, d: string | null) {
     const key = d && d.length ? d : todayISO;
     const rate = rates[key];
     if (!Number.isFinite(rate)) return 0;
     return yenToEuro(jpy, rate);
+  }
+
+  // selection helpers
+  const selectedIds = useMemo(() => Object.keys(selected).filter(id => selected[id]), [selected]);
+  const allOnPageSelected = rows.length > 0 && rows.every(r => selected[r.id]);
+  function toggleRow(id: string) {
+    setSelected(prev => ({ ...prev, [id]: !prev[id] }));
+  }
+  function toggleAllOnPage() {
+    if (allOnPageSelected) {
+      const next = { ...selected };
+      for (const r of rows) delete next[r.id];
+      setSelected(next);
+    } else {
+      const next = { ...selected };
+      for (const r of rows) next[r.id] = true;
+      setSelected(next);
+    }
+  }
+  function goScan() {
+    const ids = selectedIds.join(',');
+    if (!ids) return;
+    // Serial uniqueness: no branch is required; scan page can operate without ancestorPlacementId
+    window.location.href = `/inventory/scan?ids=${encodeURIComponent(ids)}`;
   }
 
   return (
@@ -154,7 +177,7 @@ export default function InventoryPage() {
         Per-unit prices computed from session splits and FX on package date.
       </p>
 
-      {/* Stacked filters */}
+      {/* Filters + actions */}
       <div className="rounded-lg border border-white/10 p-2">
         <div className="flex flex-wrap items-center gap-2">
           {filters.map(f => (
@@ -163,13 +186,7 @@ export default function InventoryPage() {
               className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-2 py-1 text-xs"
             >
               {f}
-              <button
-                className="hover:text-red-300"
-                onClick={() => removeFilter(f)}
-                title="Remove filter"
-              >
-                ✕
-              </button>
+              <button className="hover:text-red-300" onClick={() => removeFilter(f)} title="Remove filter">✕</button>
             </span>
           ))}
 
@@ -179,19 +196,29 @@ export default function InventoryPage() {
             value={draft}
             onChange={e => setDraft(e.target.value)}
             onKeyDown={e => {
-              if (e.key === 'Enter' || e.key === ',') {
-                e.preventDefault();
-                addFilter();
-              }
+              if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); addFilter(); }
               if (e.key === 'Escape') setDraft('');
             }}
           />
           <button className="btn btn-outline" onClick={addFilter}>Add</button>
           {filters.length > 0 && (
-            <button className="btn btn-outline" onClick={() => setFilters([])}>
-              Clear
-            </button>
+            <button className="btn btn-outline" onClick={() => setFilters([])}>Clear</button>
           )}
+
+          {/* Right-side actions */}
+          <div className="ml-auto flex items-center gap-2">
+            <button className="btn btn-outline" onClick={toggleAllOnPage} disabled={rows.length === 0}>
+              {allOnPageSelected ? 'Unselect page' : 'Select page'}
+            </button>
+            <button
+              className="btn btn-primary disabled:opacity-50"
+              onClick={goScan}
+              disabled={selectedIds.length === 0}
+              title={selectedIds.length ? `${selectedIds.length} selected` : 'Select items first'}
+            >
+              📱 Scan selected
+            </button>
+          </div>
         </div>
       </div>
 
@@ -200,9 +227,16 @@ export default function InventoryPage() {
         <table className="w-full text-sm">
           <thead className="bg-white/5 text-xs text-gray-400">
             <tr>
+              <th className="px-3 py-2 text-left w-10">
+                <input
+                  type="checkbox"
+                  aria-label="Select all on page"
+                  checked={allOnPageSelected}
+                  onChange={toggleAllOnPage}
+                />
+              </th>
               <th className="px-3 py-2 text-left">Name</th>
               <th className="px-3 py-2 text-left">Tags</th>
-              {/* ✅ NEW */}
               <th className="px-3 py-2 text-left">Condition</th>
               <th className="px-3 py-2 text-left">Item price</th>
               <th className="px-3 py-2 text-left">Real price</th>
@@ -216,11 +250,17 @@ export default function InventoryPage() {
               const totalEUR = eurFor(r.jpy.totalPerUnit, r.fxDateISO);
               return (
                 <tr key={r.id} className="border-t border-white/10">
+                  <td className="px-3 py-2">
+                    <input
+                      type="checkbox"
+                      checked={!!selected[r.id]}
+                      onChange={() => toggleRow(r.id)}
+                      aria-label={`Select ${r.name || r.id}`}
+                    />
+                  </td>
                   <td className="px-3 py-2">{r.name || '—'}</td>
                   <td className="px-3 py-2">{r.tagChain || '—'}</td>
-                  {/* ✅ NEW */}
                   <td className="px-3 py-2">{r.condition || '—'}</td>
-
                   <td className="px-3 py-2">
                     <div>{fmtEUR(baseEUR)}</div>
                     <div className="text-xs text-gray-500">{fmtJPY(r.jpy.basePerUnit)}</div>
@@ -242,7 +282,7 @@ export default function InventoryPage() {
         )}
 
         <div className="flex items-center justify-between px-3 py-2 text-xs text-gray-400">
-          <div>{rows.length} items</div>
+          <div>{rows.length} items • {selectedIds.length} selected</div>
           <button
             className="btn btn-outline"
             onClick={() => load({ cursor })}

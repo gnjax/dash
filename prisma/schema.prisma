@@ -8,11 +8,11 @@ datasource db {
 }
 
 model FxRate {
-  date     DateTime
-  base     String
-  quote    String
-  rate     Decimal    @db.Decimal(20, 10)
-  source   String     @default("frankfurter")
+  date      DateTime
+  base      String
+  quote     String
+  rate      Decimal   @db.Decimal(20, 10)
+  source    String    @default("frankfurter")
   fetchedAt DateTime  @default(now())
 
   @@id([date, base, quote])
@@ -28,7 +28,7 @@ model ListingImageCache {
 }
 
 /// =====================
-/// NEW INVENTORY MODELS
+/// INVENTORY MODELS
 /// =====================
 
 enum InventoryOriginType {
@@ -64,12 +64,12 @@ model InventoryItem {
 }
 
 model InventoryItemTag {
-  itemId String
-  tagId  String
+  itemId      String
+  tagId       String
   placementId String?
 
-  item   InventoryItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
-  tag    Tag           @relation(fields: [tagId], references: [id], onDelete: Cascade)
+  item InventoryItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  tag  Tag           @relation(fields: [tagId], references: [id], onDelete: Cascade)
 
   @@id([itemId, tagId])
   @@index([tagId])
@@ -80,16 +80,16 @@ model InventoryItemTag {
 /// =====================
 
 model ManualPurchase {
-  id                        String   @id @default(uuid())
-  currency                  String   @default("JPY")
-  intlShippingTotalYen      Decimal  @default(0) @db.Decimal(12, 2)
-  domesticShippingTotalYen  Decimal  @default(0) @db.Decimal(12, 2)
-  customsTotalYen           Decimal  @default(0) @db.Decimal(12, 2)
-  subtotalYen               Decimal? @db.Decimal(12, 2)
-  notes                     String?
-  createdAt                 DateTime @default(now())
+  id                       String   @id @default(uuid())
+  currency                 String   @default("JPY")
+  intlShippingTotalYen     Decimal  @default(0) @db.Decimal(12, 2)
+  domesticShippingTotalYen Decimal  @default(0) @db.Decimal(12, 2)
+  customsTotalYen          Decimal  @default(0) @db.Decimal(12, 2)
+  subtotalYen              Decimal? @db.Decimal(12, 2)
+  notes                    String?
+  createdAt                DateTime @default(now())
 
-  lines                     ManualLine[]
+  lines ManualLine[]
 }
 
 model ManualLine {
@@ -98,7 +98,7 @@ model ManualLine {
   title            String
   priceYen         Decimal  @db.Decimal(12, 2)
 
-  purchase         ManualPurchase @relation(fields: [manualPurchaseId], references: [id], onDelete: Cascade)
+  purchase ManualPurchase @relation(fields: [manualPurchaseId], references: [id], onDelete: Cascade)
 
   @@index([manualPurchaseId])
 }
@@ -113,16 +113,16 @@ enum FillSourceType {
 }
 
 model InventoryFillSession {
-  id               String         @id @default(uuid())
+  id               String        @id @default(uuid())
   sourceType       FillSourceType
   scrapedPackageId String?
   manualPurchaseId String?
-  customsTotalYen  Decimal        @default(0) @db.Decimal(12, 2)
-  createdAt        DateTime       @default(now())
+  customsTotalYen  Decimal       @default(0) @db.Decimal(12, 2)
+  createdAt        DateTime      @default(now())
   finalizedAt      DateTime?
 
-  sourceItems      InventoryFillSourceItem[]
-  entries          InventoryFillEntry[]
+  sourceItems InventoryFillSourceItem[]
+  entries     InventoryFillEntry[]
 
   @@index([scrapedPackageId])
   @@index([manualPurchaseId])
@@ -134,10 +134,10 @@ model InventoryFillSourceItem {
   scrapedItemId String?
   manualLineId  String?
 
-  shippingWeightPpm Int  @default(0)
+  shippingWeightPpm Int @default(0)
 
-  session       InventoryFillSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  entries       InventoryFillEntry[]
+  session InventoryFillSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  entries InventoryFillEntry[]
 
   @@index([sessionId])
   @@index([scrapedItemId])
@@ -154,25 +154,25 @@ model InventoryFillEntry {
   priceWeightPpm    Int      @default(0)
   shippingWeightPpm Int      @default(0)
 
-  // NEW: condition chosen at fill-time, copied to InventoryItem(s)
-  condition         InventoryCondition @default(Loose)
+  // condition chosen at fill-time, copied to InventoryItem(s)
+  condition InventoryCondition @default(Loose)
 
-  entryTags         InventoryFillEntryTag[]
+  entryTags InventoryFillEntryTag[]
 
-  session           InventoryFillSession    @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  sourceItem        InventoryFillSourceItem @relation(fields: [sourceItemId], references: [id], onDelete: Cascade)
+  session    InventoryFillSession    @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  sourceItem InventoryFillSourceItem @relation(fields: [sourceItemId], references: [id], onDelete: Cascade)
 
   @@index([sessionId])
   @@index([sourceItemId])
 }
 
 model InventoryFillEntryTag {
-  entryId String
-  tagId   String
+  entryId     String
+  tagId       String
   placementId String?
 
-  entry   InventoryFillEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
-  tag     Tag                @relation(fields: [tagId], references: [id], onDelete: Cascade)
+  entry InventoryFillEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  tag   Tag                @relation(fields: [tagId], references: [id], onDelete: Cascade)
 
   @@id([entryId, tagId])
   @@index([tagId])
@@ -183,9 +183,12 @@ model Tag {
   name        String
   description String?
 
-  placements      TagPlacement[]
-  itemTags        InventoryItemTag[]
-  fillEntryTags   InventoryFillEntryTag[]
+  // NEW: reference image for this tag (e.g., game box/cart art)
+  photoUrl    String?
+
+  placements    TagPlacement[]
+  itemTags      InventoryItemTag[]
+  fillEntryTags InventoryFillEntryTag[]
 
   @@unique([name])
   @@index([name])

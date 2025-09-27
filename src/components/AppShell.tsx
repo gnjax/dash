@@ -1,4 +1,4 @@
-// components/AppShell.tsx
+// src/components/AppShell.tsx
 'use client';
 
 import { useState } from 'react';
@@ -8,12 +8,11 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const [open, setOpen] = useState(false);
 
   return (
-    // On desktop we reserve a sidebar column; on mobile it's a single column
     <div className="min-h-screen lg:grid lg:grid-cols-[16rem_1fr]">
       <Sidebar open={open} onClose={() => setOpen(false)} />
 
       <div className="flex min-h-screen flex-col">
-        <header className="sticky top-0 z-20 border-b border-gray-900 bg-gray-950/80 backdrop-blur">
+        <header className="sticky top-0 z-20 border-b border-white/10 bg-[#0b0f16]/80 backdrop-blur">
           <div className="mx-auto max-w-7xl px-4 py-4 flex items-center gap-3">
             {/* mobile toggle only */}
             <button

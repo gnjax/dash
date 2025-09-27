@@ -1,6 +1,6 @@
 # Project Raw File Index
 
-Generated: 2025-09-24T23:05:21.297Z
+Generated: 2025-09-27T15:08:18.588Z
 
 > Click any link to open the **raw** file on GitHub.
 
@@ -11,6 +11,7 @@ Repository: `gnjax/dash`
 ## Directories
 
 - [(root)](#root)
+- [data](#data)
 - [docs](#docs)
 - [prisma](#prisma)
 - [public](#public)
@@ -35,6 +36,10 @@ Repository: `gnjax/dash`
 - [`README.md`](https://raw.githubusercontent.com/gnjax/dash/refs/heads/main/README.md)
 - [`tsconfig.json`](https://raw.githubusercontent.com/gnjax/dash/refs/heads/main/tsconfig.json)
 
+## data
+
+- [`data/games/libretro/Nintendo - Game Boy.json`](https://raw.githubusercontent.com/gnjax/dash/refs/heads/main/data/games/libretro/Nintendo%20-%20Game%20Boy.json)
+
 ## docs
 
 - [`docs/codebase-summary.md`](https://raw.githubusercontent.com/gnjax/dash/refs/heads/main/docs/codebase-summary.md)
@@ -55,6 +60,8 @@ Repository: `gnjax/dash`
 - [`prisma/migrations/20250913212928_add_tag_placement_refs/migration.sql`](https://raw.githubusercontent.com/gnjax/dash/refs/heads/main/prisma/migrations/20250913212928_add_tag_placement_refs/migration.sql)
 - [`prisma/migrations/20250917211750_add_fx_rate_cache/migration.sql`](https://raw.githubusercontent.com/gnjax/dash/refs/heads/main/prisma/migrations/20250917211750_add_fx_rate_cache/migration.sql)
 - [`prisma/migrations/20250924092120_add_inventory_condition/migration.sql`](https://raw.githubusercontent.com/gnjax/dash/refs/heads/main/prisma/migrations/20250924092120_add_inventory_condition/migration.sql)
+- [`prisma/migrations/20250925075300_add_inventory_item_photos/migration.sql`](https://raw.githubusercontent.com/gnjax/dash/refs/heads/main/prisma/migrations/20250925075300_add_inventory_item_photos/migration.sql)
+- [`prisma/migrations/20250927112959_move_photo_to_tag/migration.sql`](https://raw.githubusercontent.com/gnjax/dash/refs/heads/main/prisma/migrations/20250927112959_move_photo_to_tag/migration.sql)
 - [`prisma/migrations/migration_lock.toml`](https://raw.githubusercontent.com/gnjax/dash/refs/heads/main/prisma/migrations/migration_lock.toml)
 - [`prisma/schema.prisma`](https://raw.githubusercontent.com/gnjax/dash/refs/heads/main/prisma/schema.prisma)
 - [`prisma/schema.prisma~`](https://raw.githubusercontent.com/gnjax/dash/refs/heads/main/prisma/schema.prisma~)
@@ -77,6 +84,7 @@ Repository: `gnjax/dash`
 - [`src/app/api/fill-sessions/by-package/route.ts`](https://raw.githubusercontent.com/gnjax/dash/refs/heads/main/src/app/api/fill-sessions/by-package/route.ts)
 - [`src/app/api/fill-sessions/route.ts`](https://raw.githubusercontent.com/gnjax/dash/refs/heads/main/src/app/api/fill-sessions/route.ts)
 - [`src/app/api/fx/route.ts`](https://raw.githubusercontent.com/gnjax/dash/refs/heads/main/src/app/api/fx/route.ts)
+- [`src/app/api/inventory/assign-tag/route.ts`](https://raw.githubusercontent.com/gnjax/dash/refs/heads/main/src/app/api/inventory/assign-tag/route.ts)
 - [`src/app/api/inventory/route.ts`](https://raw.githubusercontent.com/gnjax/dash/refs/heads/main/src/app/api/inventory/route.ts)
 - [`src/app/api/manual-purchase/route.ts`](https://raw.githubusercontent.com/gnjax/dash/refs/heads/main/src/app/api/manual-purchase/route.ts)
 - [`src/app/api/profile/refresh/confirm/route.ts`](https://raw.githubusercontent.com/gnjax/dash/refs/heads/main/src/app/api/profile/refresh/confirm/route.ts)
@@ -88,12 +96,14 @@ Repository: `gnjax/dash`
 - [`src/app/api/scraped-packages/[id]/status/route.ts`](https://raw.githubusercontent.com/gnjax/dash/refs/heads/main/src/app/api/scraped-packages/%5Bid%5D/status/route.ts)
 - [`src/app/api/scraped-packages/route.ts`](https://raw.githubusercontent.com/gnjax/dash/refs/heads/main/src/app/api/scraped-packages/route.ts)
 - [`src/app/api/tags/route.ts`](https://raw.githubusercontent.com/gnjax/dash/refs/heads/main/src/app/api/tags/route.ts)
+- [`src/app/api/tags/serial-lookup/route.ts`](https://raw.githubusercontent.com/gnjax/dash/refs/heads/main/src/app/api/tags/serial-lookup/route.ts)
 - [`src/app/api/thumb/[listingId]/route.ts`](https://raw.githubusercontent.com/gnjax/dash/refs/heads/main/src/app/api/thumb/%5BlistingId%5D/route.ts)
 - [`src/app/dashboard/page.tsx`](https://raw.githubusercontent.com/gnjax/dash/refs/heads/main/src/app/dashboard/page.tsx)
 - [`src/app/favicon.ico`](https://raw.githubusercontent.com/gnjax/dash/refs/heads/main/src/app/favicon.ico)
 - [`src/app/globals.css`](https://raw.githubusercontent.com/gnjax/dash/refs/heads/main/src/app/globals.css)
 - [`src/app/inventory-filler/page.tsx`](https://raw.githubusercontent.com/gnjax/dash/refs/heads/main/src/app/inventory-filler/page.tsx)
 - [`src/app/inventory/page.tsx`](https://raw.githubusercontent.com/gnjax/dash/refs/heads/main/src/app/inventory/page.tsx)
+- [`src/app/inventory/scan/page.tsx`](https://raw.githubusercontent.com/gnjax/dash/refs/heads/main/src/app/inventory/scan/page.tsx)
 - [`src/app/layout.tsx`](https://raw.githubusercontent.com/gnjax/dash/refs/heads/main/src/app/layout.tsx)
 - [`src/app/page.tsx`](https://raw.githubusercontent.com/gnjax/dash/refs/heads/main/src/app/page.tsx)
 - [`src/app/scraped-packages/page.tsx`](https://raw.githubusercontent.com/gnjax/dash/refs/heads/main/src/app/scraped-packages/page.tsx)
@@ -117,6 +127,8 @@ Repository: `gnjax/dash`
 - [`src/scrapers/fromjapan.ts`](https://raw.githubusercontent.com/gnjax/dash/refs/heads/main/src/scrapers/fromjapan.ts)
 - [`src/scrapers/zenmarket.ts`](https://raw.githubusercontent.com/gnjax/dash/refs/heads/main/src/scrapers/zenmarket.ts)
 - [`src/scripts/build-summary.mjs`](https://raw.githubusercontent.com/gnjax/dash/refs/heads/main/src/scripts/build-summary.mjs)
+- [`src/scripts/games/import-libretro-tags.cjs`](https://raw.githubusercontent.com/gnjax/dash/refs/heads/main/src/scripts/games/import-libretro-tags.cjs)
+- [`src/scripts/games/scrape-libretro.mjs`](https://raw.githubusercontent.com/gnjax/dash/refs/heads/main/src/scripts/games/scrape-libretro.mjs)
 - [`src/scripts/generate-raw-index.mjs`](https://raw.githubusercontent.com/gnjax/dash/refs/heads/main/src/scripts/generate-raw-index.mjs)
 - [`src/scripts/migrate-tags-to-placement.ts`](https://raw.githubusercontent.com/gnjax/dash/refs/heads/main/src/scripts/migrate-tags-to-placement.ts)
 - [`src/scripts/pruneorphan.ts`](https://raw.githubusercontent.com/gnjax/dash/refs/heads/main/src/scripts/pruneorphan.ts)

@@ -1,8 +1,8 @@
 # Codebase Summary
 
-> Generated: 2025-09-24T23:05:21.240Z
-> Commit: 83541cc493a9c0e504bac90e8b7893ab22ae7e3b
-> Date: 2025-09-25 00:32:32 +0200
+> Generated: 2025-09-27T15:08:18.535Z
+> Commit: 04f69467a845543e5531f6f96218a14e5cdc9484
+> Date: 2025-09-25 01:05:21 +0200
 > Remote: git@github.com:gnjax/dash.git
 
 This file concatenates important text/code files in the repo so a single raw URL can be shared.
@@ -64,11 +64,11 @@ datasource db {
 }
 
 model FxRate {
-  date     DateTime
-  base     String
-  quote    String
-  rate     Decimal    @db.Decimal(20, 10)
-  source   String     @default("frankfurter")
+  date      DateTime
+  base      String
+  quote     String
+  rate      Decimal   @db.Decimal(20, 10)
+  source    String    @default("frankfurter")
   fetchedAt DateTime  @default(now())
 
   @@id([date, base, quote])
@@ -84,7 +84,7 @@ model ListingImageCache {
 }
 
 /// =====================
-/// NEW INVENTORY MODELS
+/// INVENTORY MODELS
 /// =====================
 
 enum InventoryOriginType {
@@ -120,12 +120,12 @@ model InventoryItem {
 }
 
 model InventoryItemTag {
-  itemId String
-  tagId  String
+  itemId      String
+  tagId       String
   placementId String?
 
-  item   InventoryItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
-  tag    Tag           @relation(fields: [tagId], references: [id], onDelete: Cascade)
+  item InventoryItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  tag  Tag           @relation(fields: [tagId], references: [id], onDelete: Cascade)
 
   @@id([itemId, tagId])
   @@index([tagId])
@@ -136,16 +136,16 @@ model InventoryItemTag {
 /// =====================
 
 model ManualPurchase {
-  id                        String   @id @default(uuid())
-  currency                  String   @default("JPY")
-  intlShippingTotalYen      Decimal  @default(0) @db.Decimal(12, 2)
-  domesticShippingTotalYen  Decimal  @default(0) @db.Decimal(12, 2)
-  customsTotalYen           Decimal  @default(0) @db.Decimal(12, 2)
-  subtotalYen               Decimal? @db.Decimal(12, 2)
-  notes                     String?
-  createdAt                 DateTime @default(now())
+  id                       String   @id @default(uuid())
+  currency                 String   @default("JPY")
+  intlShippingTotalYen     Decimal  @default(0) @db.Decimal(12, 2)
+  domesticShippingTotalYen Decimal  @default(0) @db.Decimal(12, 2)
+  customsTotalYen          Decimal  @default(0) @db.Decimal(12, 2)
+  subtotalYen              Decimal? @db.Decimal(12, 2)
+  notes                    String?
+  createdAt                DateTime @default(now())
 
-  lines                     ManualLine[]
+  lines ManualLine[]
 }
 
 model ManualLine {
@@ -154,7 +154,7 @@ model ManualLine {
   title            String
   priceYen         Decimal  @db.Decimal(12, 2)
 
-  purchase         ManualPurchase @relation(fields: [manualPurchaseId], references: [id], onDelete: Cascade)
+  purchase ManualPurchase @relation(fields: [manualPurchaseId], references: [id], onDelete: Cascade)
 
   @@index([manualPurchaseId])
 }
@@ -169,16 +169,16 @@ enum FillSourceType {
 }
 
 model InventoryFillSession {
-  id               String         @id @default(uuid())
+  id               String        @id @default(uuid())
   sourceType       FillSourceType
   scrapedPackageId String?
   manualPurchaseId String?
-  customsTotalYen  Decimal        @default(0) @db.Decimal(12, 2)
-  createdAt        DateTime       @default(now())
+  customsTotalYen  Decimal       @default(0) @db.Decimal(12, 2)
+  createdAt        DateTime      @default(now())
   finalizedAt      DateTime?
 
-  sourceItems      InventoryFillSourceItem[]
-  entries          InventoryFillEntry[]
+  sourceItems InventoryFillSourceItem[]
+  entries     InventoryFillEntry[]
 
   @@index([scrapedPackageId])
   @@index([manualPurchaseId])
@@ -190,10 +190,10 @@ model InventoryFillSourceItem {
   scrapedItemId String?
   manualLineId  String?
 
-  shippingWeightPpm Int  @default(0)
+  shippingWeightPpm Int @default(0)
 
-  session       InventoryFillSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  entries       InventoryFillEntry[]
+  session InventoryFillSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  entries InventoryFillEntry[]
 
   @@index([sessionId])
   @@index([scrapedItemId])
@@ -210,25 +210,25 @@ model InventoryFillEntry {
   priceWeightPpm    Int      @default(0)
   shippingWeightPpm Int      @default(0)
 
-  // NEW: condition chosen at fill-time, copied to InventoryItem(s)
-  condition         InventoryCondition @default(Loose)
+  // condition chosen at fill-time, copied to InventoryItem(s)
+  condition InventoryCondition @default(Loose)
 
-  entryTags         InventoryFillEntryTag[]
+  entryTags InventoryFillEntryTag[]
 
-  session           InventoryFillSession    @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  sourceItem        InventoryFillSourceItem @relation(fields: [sourceItemId], references: [id], onDelete: Cascade)
+  session    InventoryFillSession    @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  sourceItem InventoryFillSourceItem @relation(fields: [sourceItemId], references: [id], onDelete: Cascade)
 
   @@index([sessionId])
   @@index([sourceItemId])
 }
 
 model InventoryFillEntryTag {
-  entryId String
-  tagId   String
+  entryId     String
+  tagId       String
   placementId String?
 
-  entry   InventoryFillEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
-  tag     Tag                @relation(fields: [tagId], references: [id], onDelete: Cascade)
+  entry InventoryFillEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  tag   Tag                @relation(fields: [tagId], references: [id], onDelete: Cascade)
 
   @@id([entryId, tagId])
   @@index([tagId])
@@ -239,9 +239,12 @@ model Tag {
   name        String
   description String?
 
-  placements      TagPlacement[]
-  itemTags        InventoryItemTag[]
-  fillEntryTags   InventoryFillEntryTag[]
+  // NEW: reference image for this tag (e.g., game box/cart art)
+  photoUrl    String?
+
+  placements    TagPlacement[]
+  itemTags      InventoryItemTag[]
+  fillEntryTags InventoryFillEntryTag[]
 
   @@unique([name])
   @@index([name])
@@ -987,6 +990,86 @@ export async function GET(req: NextRequest) {
 
 ---
 
+## src/app/api/inventory/assign-tag/route.ts
+
+```ts
+// src/app/api/inventory/assign-tag/route.ts
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+
+import { NextRequest, NextResponse } from 'next/server';
+import { prisma } from '@/lib/prisma';
+
+async function resolvePlacementId(
+  tagId: string,
+  ancestorPlacementId?: string | null,
+  explicitPlacementId?: string | null
+) {
+  if (explicitPlacementId) return explicitPlacementId;
+
+  if (!ancestorPlacementId) {
+    // Any placement for this tag is acceptable if branch not specified
+    const p = await prisma.tagPlacement.findFirst({ where: { tagId }, select: { id: true } });
+    return p?.id ?? null;
+  }
+
+  // Find placement of tag that is a descendant of ancestorPlacementId
+  const descendants = await prisma.placementClosure.findMany({
+    where: { ancestorPlacementId },
+    select: { descendantPlacementId: true },
+  });
+  const descIds = descendants.map(d => d.descendantPlacementId);
+  if (!descIds.length) return null;
+
+  const placement = await prisma.tagPlacement.findFirst({
+    where: { id: { in: descIds }, tagId },
+    select: { id: true },
+  });
+
+  return placement?.id ?? null;
+}
+
+export async function POST(req: NextRequest) {
+  try {
+    const body = await req.json();
+
+    // Keep the SAME input contract as before:
+    const itemIds: string[] = Array.isArray(body?.itemIds) ? body.itemIds.filter(Boolean) : [];
+    const tagId: string | undefined = body?.tagId;
+    const ancestorPlacementId: string | undefined = body?.ancestorPlacementId || undefined;
+    const placementIdOverride: string | undefined = body?.placementId || undefined;
+
+    if (!itemIds.length) return NextResponse.json({ error: 'itemIds[] required' }, { status: 400 });
+    if (!tagId) return NextResponse.json({ error: 'tagId required' }, { status: 400 });
+
+    // Resolve placement the same way you already had it
+    const placementId = await resolvePlacementId(tagId, ancestorPlacementId, placementIdOverride);
+    if (!placementId) {
+      return NextResponse.json(
+        { error: 'No placement found for tag under the selected branch.' },
+        { status: 400 }
+      );
+    }
+
+    // NEW behavior: replace existing tags for these items
+    await prisma.$transaction([
+      prisma.inventoryItemTag.deleteMany({ where: { itemId: { in: itemIds } } }),
+      prisma.inventoryItemTag.createMany({
+        data: itemIds.map(id => ({ itemId: id, tagId, placementId })),
+        skipDuplicates: true,
+      }),
+    ]);
+
+    return NextResponse.json({ ok: true, placementId });
+  } catch (e: any) {
+    return NextResponse.json({ error: e?.message || 'Failed to assign tag.' }, { status: 400 });
+  }
+}
+
+```
+
+---
+
 ## src/app/api/inventory/route.ts
 
 ```ts
@@ -1601,11 +1684,9 @@ import { prisma } from '@/lib/prisma';
 import { scrapeFromJapanShippedList } from '@/scrapers/fromjapan';
 import { translateJaToEn } from '@/lib/translate';
 
-function buildPageUrl(page: number): string {
-  // FromJapan shipped history page; page param TBD later.
-  // We keep the builder so it's trivial to add pagination later.
-  if (page <= 1) return 'https://www.fromjapan.co.jp/japan/en/member/history/ship/list';
-  return `https://www.fromjapan.co.jp/japan/en/member/history/ship/list?page=${page}`;
+// Always use base list URL; paging is done via POST { currentPage } inside the scraper.
+function baseUrl(): string {
+  return 'https://www.fromjapan.co.jp/japan/en/member/history/ship/list';
 }
 
 export const dynamic = 'force-dynamic';
@@ -1616,8 +1697,8 @@ export async function POST(req: Request) {
 
   try {
     for (let pageNum = Number(startPage); pageNum < Number(startPage) + Number(maxPages); pageNum++) {
-      const url = buildPageUrl(pageNum);
-      const { packages } = await scrapeFromJapanShippedList(url);
+      const url = baseUrl();
+      const { packages } = await scrapeFromJapanShippedList(url, pageNum);
       pagesCrawled++;
 
       if (!packages.length) { stopReason = 'empty_page'; break; }
@@ -1645,8 +1726,8 @@ export async function POST(req: Request) {
           update: {
             pageUrl: url,
             dateShipped: p.dateShipped ? new Date(p.dateShipped) : null,
-            intlTrackingNumber: p.trackingNumbers?.[0] || null,   // single tracking per package entry
-            intlTrackingUrl: null, // FJ detail URL not required here; can add later
+            intlTrackingNumber: p.trackingNumbers?.[0] || null,
+            intlTrackingUrl: null,
             internationalShippingFeeYen: p.internationalShippingFeeYen ?? null,
             domesticShippingFeeYen: p.domesticShippingFeeYen ?? null,
             raw: p,
@@ -1655,7 +1736,7 @@ export async function POST(req: Request) {
           create: {
             source: 'fromjapan',
             pageUrl: url,
-            packageNumber: p.packageNumber, // unique (includes #1/#2 for multi-pack)
+            packageNumber: p.packageNumber,
             dateShipped: p.dateShipped ? new Date(p.dateShipped) : null,
             intlTrackingNumber: p.trackingNumbers?.[0] || null,
             intlTrackingUrl: null,
@@ -1666,7 +1747,7 @@ export async function POST(req: Request) {
           select: { id: true, packageNumber: true },
         });
 
-        // Replace items for this package
+        // Replace items (idempotent)
         await prisma.scrapedItem.deleteMany({ where: { scrapedPackageId: up.id } });
         if (p.items?.length) {
           await prisma.scrapedItem.createMany({
@@ -1693,6 +1774,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: e?.message || 'crawl failed', pagesCrawled, inserted, updated }, { status: 500 });
   }
 }
+
 ```
 
 ---
@@ -2186,6 +2268,111 @@ export async function DELETE(req: NextRequest) {
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || 'Failed to delete placement.' }, { status: 400 });
   }
+}
+
+```
+
+---
+
+## src/app/api/tags/serial-lookup/route.ts
+
+```ts
+// src/app/api/tags/serial-lookup/route.ts
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+
+import { NextRequest, NextResponse } from 'next/server';
+import { prisma } from '@/lib/prisma';
+
+// Basic OCR normalization/corrections for cartridge serials
+function normalizeCandidates(input: string): string[] {
+  const raw = (input || '').toUpperCase();
+  // Extract chunks that look like serial-ish strings
+  const tokens = Array.from(new Set(raw.match(/[A-Z0-9\-]{3,}/g) || []));
+  const swaps: Record<string, string> = { O: '0', I: '1', Z: '2', S: '5', B: '8', '—': '-', '–': '-' };
+
+  const cands = new Set<string>();
+  for (const t of tokens) {
+    const base = t.replace(/[–—]/g, '-').replace(/\s+/g, '').trim();
+    if (base.length) cands.add(base);
+    // swap lookalikes
+    let alt = base;
+    for (const [k, v] of Object.entries(swaps)) alt = alt.split(k).join(v);
+    if (alt !== base) cands.add(alt);
+  }
+  // Only keep strings that actually include a dash (your rule)
+  return Array.from(cands).filter(s => s.includes('-'));
+}
+
+export async function GET(req: NextRequest) {
+  const { searchParams } = new URL(req.url);
+  const q = searchParams.get('q') || '';
+  const ancestorPlacementId = searchParams.get('ancestorPlacementId') || null;
+
+  const candidates = normalizeCandidates(q);
+  if (candidates.length === 0) {
+    return NextResponse.json({ matches: [] });
+  }
+
+  // If a branch is provided, constrain to tags present under that branch
+  let tagIdsScoped: Set<string> | null = null;
+  let placementByTagId: Map<string, string> | null = null;
+
+  if (ancestorPlacementId) {
+    const desc = await prisma.placementClosure.findMany({
+      where: { ancestorPlacementId },
+      select: { descendantPlacementId: true },
+    });
+    const descendantIds = desc.map(d => d.descendantPlacementId);
+
+    if (descendantIds.length) {
+      const placements = await prisma.tagPlacement.findMany({
+        where: { id: { in: descendantIds } },
+        select: { id: true, tagId: true },
+      });
+      tagIdsScoped = new Set(placements.map(p => p.tagId));
+      placementByTagId = new Map(placements.map(p => [p.tagId, p.id]));
+    }
+  }
+
+  // Find exact name matches first (case-insensitive)
+  const exact = await prisma.tag.findMany({
+    where: {
+      AND: [
+        { name: { in: candidates, mode: 'insensitive' } },
+        ...(tagIdsScoped ? [{ id: { in: Array.from(tagIdsScoped) } }] : []),
+      ],
+    },
+    select: { id: true, name: true, description: true, photoUrl: true },
+    take: 10,
+  });
+
+  // If nothing, try contains (still filtered to branch if provided)
+  const fallbackNeeded = exact.length === 0;
+  const fuzzy = fallbackNeeded
+    ? await prisma.tag.findMany({
+        where: {
+          AND: [
+            {
+              OR: candidates.map(c => ({ name: { contains: c, mode: 'insensitive' } })),
+            },
+            ...(tagIdsScoped ? [{ id: { in: Array.from(tagIdsScoped) } }] : []),
+          ],
+        },
+        select: { id: true, name: true, description: true, photoUrl: true },
+        take: 10,
+      })
+    : [];
+
+  const rows = (exact.length ? exact : fuzzy).map(t => ({
+    tagId: t.id,
+    placementIdUnderBranch: placementByTagId?.get(t.id) ?? null,
+    serial: t.name,
+    title: t.description,
+    photoUrl: t.photoUrl || null,
+  }));
+
+  return NextResponse.json({ matches: rows });
 }
 
 ```
@@ -3186,10 +3373,9 @@ import { getJpyToEurRate, yenToEuro } from '@/lib/fx.client';
 type Row = {
   id: string;
   name: string;
-  // ✅ NEW: condition is returned by the API (Loose | Boxed | CIB | NIB)
-  condition: string;
-  tagChain: string; // e.g. "Foo (Root > Branch > Leaf) • Bar (...)"
-  fxDateISO: string | null; // date used for JPY->EUR conversion (YYYY-MM-DD)
+  condition: string; // Loose | Boxed | CIB | NIB
+  tagChain: string;  // "Foo (Root > Branch > Leaf) • Bar (…)”
+  fxDateISO: string | null;
   packageNumber: string | null;
   purchaseDateISO: string | null;
   jpy: {
@@ -3217,19 +3403,23 @@ function fmtJPY(v: number | null | undefined) {
 }
 
 export default function InventoryPage() {
-  // stacked filters (chips)
+  // filters
   const [filters, setFilters] = useState<string[]>([]);
   const [draft, setDraft] = useState('');
+
+  // data
   const [rows, setRows] = useState<Row[]>([]);
   const [cursor, setCursor] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  // cache of JPY->EUR rates by date
-  const [rates, setRates] = useState<Record<string, number>>({});
+  // selection
+  const [selected, setSelected] = useState<Record<string, boolean>>({});
 
+  // FX cache
+  const [rates, setRates] = useState<Record<string, number>>({});
   const todayISO = useMemo(() => new Date().toISOString().slice(0, 10), []);
 
-  // URL sync (optional but nice; keeps filters in the address bar)
+  // URL sync for filters
   useEffect(() => {
     const params = new URLSearchParams();
     for (const f of filters) params.append('q', f);
@@ -3253,7 +3443,7 @@ export default function InventoryPage() {
           const r = await getJpyToEurRate(d);
           return [d, r] as const;
         } catch {
-          return [d, NaN] as const; // avoid re-fetch loops; UI will show €0.00
+          return [d, NaN] as const;
         }
       }),
     );
@@ -3281,8 +3471,10 @@ export default function InventoryPage() {
       const page = j.items || [];
       setRows(prev => (reset ? page : [...prev, ...page]));
       setCursor(j.nextCursor ?? null);
-
       await ensureRates(page.map(x => x.fxDateISO));
+
+      // if we reset, clear selection (only selected on current page)
+      if (reset) setSelected({});
     } catch (e: any) {
       alert(e.message || 'Load failed');
     } finally {
@@ -3290,21 +3482,17 @@ export default function InventoryPage() {
     }
   }
 
-  // initial load
+  // initial load + hydrate filters from URL
   useEffect(() => {
-    // hydrate filters from URL (?q=...&q=...)
     const sp = new URLSearchParams(window.location.search);
     const qs = sp.getAll('q').map(s => s.trim()).filter(Boolean);
     if (qs.length) setFilters(qs);
-
-    // then load
     load({ reset: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // reload when filters change
   useEffect(() => {
-    // immediate reload
     load({ reset: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filters.join('\u0001')]);
@@ -3315,15 +3503,37 @@ export default function InventoryPage() {
     if (!filters.includes(v)) setFilters(prev => [...prev, v]);
     setDraft('');
   }
-  function removeFilter(f: string) {
-    setFilters(prev => prev.filter(x => x !== f));
-  }
+  function removeFilter(f: string) { setFilters(prev => prev.filter(x => x !== f)); }
 
   function eurFor(jpy: number, d: string | null) {
     const key = d && d.length ? d : todayISO;
     const rate = rates[key];
     if (!Number.isFinite(rate)) return 0;
     return yenToEuro(jpy, rate);
+  }
+
+  // selection helpers
+  const selectedIds = useMemo(() => Object.keys(selected).filter(id => selected[id]), [selected]);
+  const allOnPageSelected = rows.length > 0 && rows.every(r => selected[r.id]);
+  function toggleRow(id: string) {
+    setSelected(prev => ({ ...prev, [id]: !prev[id] }));
+  }
+  function toggleAllOnPage() {
+    if (allOnPageSelected) {
+      const next = { ...selected };
+      for (const r of rows) delete next[r.id];
+      setSelected(next);
+    } else {
+      const next = { ...selected };
+      for (const r of rows) next[r.id] = true;
+      setSelected(next);
+    }
+  }
+  function goScan() {
+    const ids = selectedIds.join(',');
+    if (!ids) return;
+    // Serial uniqueness: no branch is required; scan page can operate without ancestorPlacementId
+    window.location.href = `/inventory/scan?ids=${encodeURIComponent(ids)}`;
   }
 
   return (
@@ -3333,7 +3543,7 @@ export default function InventoryPage() {
         Per-unit prices computed from session splits and FX on package date.
       </p>
 
-      {/* Stacked filters */}
+      {/* Filters + actions */}
       <div className="rounded-lg border border-white/10 p-2">
         <div className="flex flex-wrap items-center gap-2">
           {filters.map(f => (
@@ -3342,13 +3552,7 @@ export default function InventoryPage() {
               className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-2 py-1 text-xs"
             >
               {f}
-              <button
-                className="hover:text-red-300"
-                onClick={() => removeFilter(f)}
-                title="Remove filter"
-              >
-                ✕
-              </button>
+              <button className="hover:text-red-300" onClick={() => removeFilter(f)} title="Remove filter">✕</button>
             </span>
           ))}
 
@@ -3358,19 +3562,29 @@ export default function InventoryPage() {
             value={draft}
             onChange={e => setDraft(e.target.value)}
             onKeyDown={e => {
-              if (e.key === 'Enter' || e.key === ',') {
-                e.preventDefault();
-                addFilter();
-              }
+              if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); addFilter(); }
               if (e.key === 'Escape') setDraft('');
             }}
           />
           <button className="btn btn-outline" onClick={addFilter}>Add</button>
           {filters.length > 0 && (
-            <button className="btn btn-outline" onClick={() => setFilters([])}>
-              Clear
-            </button>
+            <button className="btn btn-outline" onClick={() => setFilters([])}>Clear</button>
           )}
+
+          {/* Right-side actions */}
+          <div className="ml-auto flex items-center gap-2">
+            <button className="btn btn-outline" onClick={toggleAllOnPage} disabled={rows.length === 0}>
+              {allOnPageSelected ? 'Unselect page' : 'Select page'}
+            </button>
+            <button
+              className="btn btn-primary disabled:opacity-50"
+              onClick={goScan}
+              disabled={selectedIds.length === 0}
+              title={selectedIds.length ? `${selectedIds.length} selected` : 'Select items first'}
+            >
+              📱 Scan selected
+            </button>
+          </div>
         </div>
       </div>
 
@@ -3379,9 +3593,16 @@ export default function InventoryPage() {
         <table className="w-full text-sm">
           <thead className="bg-white/5 text-xs text-gray-400">
             <tr>
+              <th className="px-3 py-2 text-left w-10">
+                <input
+                  type="checkbox"
+                  aria-label="Select all on page"
+                  checked={allOnPageSelected}
+                  onChange={toggleAllOnPage}
+                />
+              </th>
               <th className="px-3 py-2 text-left">Name</th>
               <th className="px-3 py-2 text-left">Tags</th>
-              {/* ✅ NEW */}
               <th className="px-3 py-2 text-left">Condition</th>
               <th className="px-3 py-2 text-left">Item price</th>
               <th className="px-3 py-2 text-left">Real price</th>
@@ -3395,11 +3616,17 @@ export default function InventoryPage() {
               const totalEUR = eurFor(r.jpy.totalPerUnit, r.fxDateISO);
               return (
                 <tr key={r.id} className="border-t border-white/10">
+                  <td className="px-3 py-2">
+                    <input
+                      type="checkbox"
+                      checked={!!selected[r.id]}
+                      onChange={() => toggleRow(r.id)}
+                      aria-label={`Select ${r.name || r.id}`}
+                    />
+                  </td>
                   <td className="px-3 py-2">{r.name || '—'}</td>
                   <td className="px-3 py-2">{r.tagChain || '—'}</td>
-                  {/* ✅ NEW */}
                   <td className="px-3 py-2">{r.condition || '—'}</td>
-
                   <td className="px-3 py-2">
                     <div>{fmtEUR(baseEUR)}</div>
                     <div className="text-xs text-gray-500">{fmtJPY(r.jpy.basePerUnit)}</div>
@@ -3421,7 +3648,7 @@ export default function InventoryPage() {
         )}
 
         <div className="flex items-center justify-between px-3 py-2 text-xs text-gray-400">
-          <div>{rows.length} items</div>
+          <div>{rows.length} items • {selectedIds.length} selected</div>
           <button
             className="btn btn-outline"
             onClick={() => load({ cursor })}
@@ -3439,13 +3666,400 @@ export default function InventoryPage() {
 
 ---
 
+## src/app/inventory/scan/page.tsx
+
+```tsx
+'use client';
+
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
+
+type Match = {
+  tagId: string;
+  placementIdUnderBranch: string | null;
+  serial: string;
+  title: string | null;
+  photoUrl: string | null;
+};
+
+async function serialLookup(text: string): Promise<Match[]> {
+  const sp = new URLSearchParams();
+  sp.set('q', text);
+  const r = await fetch(`/api/tags/serial-lookup?${sp.toString()}`, { cache: 'no-store' });
+  const j = await r.json();
+  return (j.matches || []) as Match[];
+}
+
+async function assignTag(itemId: string, tagId: string, placementId?: string | null) {
+  const r = await fetch('/api/inventory/assign-tag', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      itemIds: [itemId],
+      tagId,
+      placementId: placementId ?? undefined,
+    }),
+  });
+  if (!r.ok) {
+    const j = await r.json().catch(() => ({}));
+    throw new Error(j.error || 'assign_failed');
+  }
+}
+
+/* ------------------------ OCR (static, no workers) ------------------------ */
+
+let tMod: any = null;
+async function recognizeText(dataUrl: string, psm: '7'|'6' = '7'): Promise<string> {
+  if (!tMod) tMod = await import('tesseract.js');
+  const recognize = tMod?.recognize || tMod?.default?.recognize || tMod?.Tesseract?.recognize;
+  if (typeof recognize !== 'function') throw new Error('tesseract_unavailable');
+
+  const opts = {
+    tessedit_pageseg_mode: psm,                           // 7 = single line (preferred)
+    tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-',
+    tessedit_char_blacklist: 'abcdefghijklmnopqrstuvwxyz_~`!@#$%^&*()+=[]{}|\\;:\'",.<>/?',
+    load_system_dawg: '0',
+    load_freq_dawg: '0',
+    preserve_interword_spaces: '1',
+    classify_bln_numeric_mode: '0',
+    user_defined_dpi: '300',
+  } as any;
+
+  const res = await recognize(dataUrl, 'eng', opts);
+  return ((res?.data?.text || (res as any)?.text || '') as string).toUpperCase();
+}
+
+/* ---------------------- Candidate extraction (light) ---------------------- */
+
+function extractSerialCandidates(text: string): string[] {
+  const up = text.toUpperCase().replace(/[–—]/g, '-');
+  // Only allow A–Z, 0–9, dash and spaces to be safe
+  const cleaned = up.replace(/[^A-Z0-9\-\s]/g, ' ').replace(/\s+/g, ' ').trim();
+  const tokens = Array.from(new Set((cleaned.match(/[A-Z0-9\-]{3,}/g) || []).map(t => t.trim())));
+  // serial-like: must contain at least one dash, reasonable length
+  return tokens.filter(s => s.includes('-') && s.length >= 5 && s.length <= 28);
+}
+
+function bestCandidate(cands: string[]): string | null {
+  if (!cands.length) return null;
+  const score = (s: string) => {
+    const dashCount = (s.match(/-/g) || []).length;
+    const dashInside = (s.indexOf('-') > 0 && s.lastIndexOf('-') < s.length - 1) ? 2 : 0;
+    return s.length * 2 + dashCount + dashInside;
+  };
+  return cands.sort((a, b) => score(b) - score(a))[0] || null;
+}
+
+/* --------------------------- Light preprocessing -------------------------- */
+
+// 1) crop a small center band from video/canvas, scale to target width
+function cropBand(videoOrCanvas: HTMLVideoElement | HTMLCanvasElement, targetW = 640) : HTMLCanvasElement {
+  const vw = (videoOrCanvas as any).videoWidth || (videoOrCanvas as HTMLCanvasElement).width || 1280;
+  const vh = (videoOrCanvas as any).videoHeight || (videoOrCanvas as HTMLCanvasElement).height || 720;
+
+  const bandH = Math.floor(vh * 0.24);
+  const bandY = Math.floor((vh - bandH) / 2);
+  const bandW = Math.floor(vw * 0.76);
+  const bandX = Math.floor((vw - bandW) / 2);
+
+  const outH = Math.round(targetW * (bandH / bandW));
+  const c = document.createElement('canvas');
+  c.width = targetW; c.height = outH;
+  const ctx = c.getContext('2d', { willReadFrequently: true })!;
+  ctx.imageSmoothingEnabled = true;
+  ctx.drawImage(videoOrCanvas as any, bandX, bandY, bandW, bandH, 0, 0, targetW, outH);
+  return c;
+}
+
+// 2) very light grayscale + contrast stretch (clip 2%)
+function toGrayscaleContrast(src: HTMLCanvasElement): HTMLCanvasElement {
+  const c = document.createElement('canvas');
+  c.width = src.width; c.height = src.height;
+  const ctx = c.getContext('2d', { willReadFrequently: true })!;
+  ctx.drawImage(src, 0, 0);
+  const img = ctx.getImageData(0, 0, c.width, c.height);
+  const d = img.data;
+
+  const hist = new Uint32Array(256);
+  for (let i = 0; i < d.length; i += 4) {
+    const y = (d[i] * 0.299 + d[i+1] * 0.587 + d[i+2] * 0.114) | 0;
+    d[i] = d[i+1] = d[i+2] = y;
+    hist[y]++;
+  }
+  const total = d.length / 4;
+  const clip = Math.floor(total * 0.02);
+  let min = 0, max = 255, acc = 0;
+  for (let i = 0; i < 256; i++) { acc += hist[i]; if (acc > clip) { min = i; break; } }
+  acc = 0;
+  for (let i = 255; i >= 0; i--) { acc += hist[i]; if (acc > clip) { max = i; break; } }
+  const rng = Math.max(1, max - min);
+  for (let i = 0; i < d.length; i += 4) {
+    const y = Math.max(0, Math.min(255, Math.round((d[i] - min) * 255 / rng)));
+    d[i] = d[i+1] = d[i+2] = y;
+  }
+  ctx.putImageData(img, 0, 0);
+  return c;
+}
+
+// 3) mild binarization (global threshold based on mid gray)
+function toMildBinary(src: HTMLCanvasElement): HTMLCanvasElement {
+  const c = document.createElement('canvas');
+  c.width = src.width; c.height = src.height;
+  const ctx = c.getContext('2d', { willReadFrequently: true })!;
+  ctx.drawImage(src, 0, 0);
+  const img = ctx.getImageData(0, 0, c.width, c.height);
+  const d = img.data;
+
+  // compute mean gray
+  let sum = 0, cnt = 0;
+  for (let i = 0; i < d.length; i += 4) { sum += d[i]; cnt++; }
+  const mean = sum / Math.max(1, cnt);
+  const T = Math.min(220, Math.max(80, Math.round(mean * 0.95))); // gentle
+
+  for (let i = 0; i < d.length; i += 4) {
+    const v = d[i] > T ? 255 : 0;
+    d[i] = d[i+1] = d[i+2] = v;
+  }
+  ctx.putImageData(img, 0, 0);
+  return c;
+}
+
+/* --------------------------------- Page ---------------------------------- */
+
+export default function ScanInventoryPage() {
+  const sp = useSearchParams();
+  const idsParam = sp.get('ids') || '';
+  const itemIds = useMemo(() => idsParam.split(',').map(s => s.trim()).filter(Boolean), [idsParam]);
+
+  const [idx, setIdx] = useState(0);
+  const currentItemId = itemIds[idx] || null; // single declaration
+
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+
+  const [live, setLive] = useState(true);          // auto-scan loop
+  const [scanning, setScanning] = useState(false); // throttle
+  const [locked, setLocked] = useState<Match | null>(null);
+
+  const [lastText, setLastText] = useState('');
+  const [matches, setMatches] = useState<Match[]>([]);
+  const [manualSerial, setManualSerial] = useState('');
+  const [err, setErr] = useState<string | null>(null);
+
+  // start camera (small preview)
+  useEffect(() => {
+    let stream: MediaStream | null = null;
+    (async () => {
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: { ideal: 'environment' },
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+          },
+          audio: false,
+        });
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          await videoRef.current.play();
+        }
+      } catch (e: any) {
+        setErr(e?.message || 'camera_error');
+      }
+    })();
+    return () => { if (stream) stream.getTracks().forEach(t => t.stop()); };
+  }, []);
+
+  // live loop — every ~1s, try light passes until we get a candidate; lock if DB match
+  useEffect(() => {
+    if (!live || locked) return;
+    const id = setInterval(async () => {
+      if (scanning) return;
+      try {
+        setScanning(true);
+        const v = videoRef.current;
+        if (!v || v.readyState < 2) return;
+
+        // 1) raw crop
+        const band = cropBand(v, 640);
+
+        // Try variants in order: raw → gray/contrast → mild binary
+        const variants: string[] = [];
+        variants.push(band.toDataURL('image/png'));
+
+        const gray = toGrayscaleContrast(band);
+        variants.push(gray.toDataURL('image/png'));
+
+        const bin = toMildBinary(gray);
+        variants.push(bin.toDataURL('image/png'));
+
+        let bestTextLocal = '';
+        let topCandidate: string | null = null;
+
+        for (const durl of variants) {
+          // First with PSM 7 (single line), then fallback PSM 6 if needed
+          let text = await recognizeText(durl, '7');
+          if (!text || !text.includes('-')) {
+            const t6 = await recognizeText(durl, '6');
+            if ((t6?.length || 0) > (text?.length || 0)) text = t6;
+          }
+          if (text && text.length > bestTextLocal.length) bestTextLocal = text;
+
+          const cands = extractSerialCandidates(text);
+          const top = bestCandidate(cands);
+          if (top) { topCandidate = top; break; }
+        }
+
+        setLastText(bestTextLocal);
+
+        if (!topCandidate) return;
+
+        const ms = await serialLookup(topCandidate);
+        setMatches(ms);
+
+        if (ms.length) {
+          setLive(false);
+          setLocked(ms[0]);
+          // @ts-ignore
+          if (navigator.vibrate) navigator.vibrate(25);
+        }
+      } catch (e: any) {
+        setErr(e?.message || 'scan_failed');
+      } finally {
+        setScanning(false);
+      }
+    }, 1000);
+    return () => clearInterval(id);
+  }, [live, locked, scanning]);
+
+  // manual override live lookup when paused
+  useEffect(() => {
+    if (!manualSerial.trim() || live) return;
+    const t = setTimeout(async () => {
+      try {
+        const ms = await serialLookup(manualSerial.trim().toUpperCase());
+        setMatches(ms);
+      } catch {}
+    }, 200);
+    return () => clearTimeout(t);
+  }, [manualSerial, live]);
+
+  async function confirm(m: Match) {
+    if (!currentItemId) return;
+    try {
+      await assignTag(currentItemId, m.tagId, m.placementIdUnderBranch);
+      // move to next and resume scanning
+      setLocked(null);
+      setMatches([]);
+      setManualSerial('');
+      if (idx < itemIds.length - 1) {
+        setIdx(idx + 1);
+        setLive(true);
+      } else {
+        alert('All selected items processed.');
+      }
+    } catch (e: any) {
+      alert(e?.message || 'Failed to assign tag.');
+    }
+  }
+
+  function resume() {
+    setLocked(null);
+    setMatches([]);
+    setManualSerial('');
+    setLive(true);
+  }
+
+  return (
+    <div className="space-y-4">
+      <h1 className="text-lg font-semibold">Scan & Match Game Serials</h1>
+      <div className="text-sm text-gray-400">
+        Items: {itemIds.length} • Current: {idx + 1}/{itemIds.length}
+      </div>
+
+      {!currentItemId ? (
+        <div className="text-gray-400">No items left. Pass <code>?ids=ID1,ID2</code> in the URL.</div>
+      ) : (
+        <>
+          {/* Compact camera header */}
+          <div className="rounded-xl border border-white/10 p-3">
+            <div className="flex items-center gap-3">
+              <div className="relative w-56 h-32 shrink-0 overflow-hidden rounded-lg border border-white/10 bg-black">
+                <video ref={videoRef} playsInline muted className="h-full w-full object-cover" />
+                <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                  <div className="w-[78%] h-[34%] border border-white/60 rounded-md" />
+                </div>
+              </div>
+              <div className="flex-1">
+                <label className="inline-flex items-center gap-2 text-sm">
+                  <input type="checkbox" checked={live && !locked} onChange={(e) => setLive(e.target.checked)} disabled={!!locked} />
+                  Live scan
+                </label>
+                {scanning && <span className="ml-3 text-xs text-gray-400">scanning…</span>}
+                {err && <span className="ml-3 text-xs text-red-400">{err}</span>}
+                <div className="mt-2 text-xs text-gray-400">Keep the serial inside the box. It will lock when detected.</div>
+              </div>
+            </div>
+          </div>
+
+          {/* Results & manual override */}
+          <div className="rounded-xl border border-white/10 p-3 space-y-3">
+            <div className="text-xs text-gray-400">Manual override (optional):</div>
+            <input
+              className="field w-full"
+              placeholder="Type serial (e.g., DMG-XXXX-JPN)…"
+              value={manualSerial}
+              onChange={(e) => setManualSerial(e.target.value)}
+              autoCapitalize="characters"
+              autoCorrect="off"
+              spellCheck={false}
+              disabled={!!locked}
+            />
+
+            <div className="text-xs text-gray-400">Matches:</div>
+            {matches.length === 0 && <div className="text-gray-400 text-sm">No matches yet.</div>}
+
+            <div className="space-y-3">
+              {matches.map((m, i) => (
+                <div key={m.tagId + i} className={`flex items-center gap-3 rounded border p-2 ${locked?.tagId === m.tagId ? 'border-green-500/60' : 'border-white/10'}`}>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  {m.photoUrl ? <img src={m.photoUrl} alt="" className="w-16 h-16 object-contain rounded" /> : <div className="w-16 h-16 grid place-items-center text-xs text-gray-500">No img</div>}
+                  <div className="flex-1">
+                    <div className="font-mono text-sm">{m.serial}</div>
+                    <div className="text-xs text-gray-400">{m.title || '—'}</div>
+                  </div>
+                  <button className="btn btn-outline" onClick={() => confirm(m)}>✅ Confirm</button>
+                </div>
+              ))}
+            </div>
+
+            {!!locked && (
+              <div className="pt-2 flex items-center gap-2">
+                <button className="btn btn-outline" onClick={resume}>↻ Resume</button>
+              </div>
+            )}
+          </div>
+
+          <div className="text-xs text-gray-400">
+            Current itemId: <code className="text-gray-300">{currentItemId}</code>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+```
+
+---
+
 ## src/app/layout.tsx
 
 ```tsx
+// src/app/layout.tsx
 import './globals.css';
 import type { Metadata } from 'next';
-import Sidebar from '../components/Sidebar';
 import { Inter } from 'next/font/google';
+import AppShell from '@/components/AppShell';
 
 const inter = Inter({ subsets: ['latin'] });
 
@@ -3457,19 +4071,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" className="h-full">
       <body className={`${inter.className} h-full bg-[#0b0f16] text-gray-100 antialiased`}>
-        <div className="flex min-h-screen">
-          <Sidebar />
-          <main className="flex-1">
-            <header className="sticky top-0 z-10 border-b border-white/5 bg-[#0b0f16]/80 backdrop-blur">
-              <div className="mx-auto max-w-7xl px-4 py-4">
-                <h1 className="text-lg font-semibold tracking-tight">
-                  {process.env.NEXT_PUBLIC_APP_NAME || 'Proxy Dashboard'}
-                </h1>
-              </div>
-            </header>
-            <div className="mx-auto max-w-7xl px-4 py-6">{children}</div>
-          </main>
-        </div>
+        <AppShell>{children}</AppShell>
       </body>
     </html>
   );
@@ -4379,7 +4981,7 @@ function DetailsForm(props: {
 ## src/components/AppShell.tsx
 
 ```tsx
-// components/AppShell.tsx
+// src/components/AppShell.tsx
 'use client';
 
 import { useState } from 'react';
@@ -4389,12 +4991,11 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const [open, setOpen] = useState(false);
 
   return (
-    // On desktop we reserve a sidebar column; on mobile it's a single column
     <div className="min-h-screen lg:grid lg:grid-cols-[16rem_1fr]">
       <Sidebar open={open} onClose={() => setOpen(false)} />
 
       <div className="flex min-h-screen flex-col">
-        <header className="sticky top-0 z-20 border-b border-gray-900 bg-gray-950/80 backdrop-blur">
+        <header className="sticky top-0 z-20 border-b border-white/10 bg-[#0b0f16]/80 backdrop-blur">
           <div className="mx-auto max-w-7xl px-4 py-4 flex items-center gap-3">
             {/* mobile toggle only */}
             <button
@@ -4426,50 +5027,82 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
 ```tsx
 // src/components/Sidebar.tsx
+'use client';
+
 import Link from 'next/link';
-// import { usePathname } from 'next/navigation'; // if you later want active states
+import { useCallback } from 'react';
 
-export default function Sidebar() {
+type Props = {
+  open?: boolean;
+  onClose?: () => void;
+};
+
+export default function Sidebar({ open = false, onClose }: Props) {
+  const close = useCallback(() => onClose?.(), [onClose]);
+
+  const Nav = (
+    <nav className="space-y-1">
+      <Link href="/dashboard" className="block px-2" onClick={close}>
+        <div className="group flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-gray-300 hover:bg-white/5">
+          <span>🏠</span><span>Dashboard</span>
+        </div>
+      </Link>
+      <Link href="/scraped-packages" className="block px-2" onClick={close}>
+        <div className="group flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-gray-300 hover:bg-white/5">
+          <span>📦</span><span>Scraped Packages</span>
+        </div>
+      </Link>
+      <Link href="/tags" className="block px-2" onClick={close}>
+        <div className="group flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-gray-300 hover:bg-white/5">
+          <span>🏷️</span><span>Tags</span>
+        </div>
+      </Link>
+      <Link href="/inventory-filler" className="block px-2" onClick={close}>
+        <div className="group flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-gray-300 hover:bg-white/5">
+          <span>🧮</span><span>Inventory filler</span>
+        </div>
+      </Link>
+      <Link href="/inventory" className="block px-2" onClick={close}>
+        <div className="group flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-gray-300 hover:bg-white/5">
+          <span>📋</span><span>Inventory</span>
+        </div>
+      </Link>
+    </nav>
+  );
+
   return (
-    <aside className="w-64 border-r border-white/5 bg-[#0b0f16] p-3">
-      <div className="mb-3 px-2">
-        <div className="text-xs uppercase tracking-wide text-gray-500">Navigation</div>
-      </div>
+    <>
+      {/* Desktop sidebar */}
+      <aside className="hidden lg:block w-64 border-r border-white/5 bg-[#0b0f16] p-3">
+        <div className="mb-3 px-2">
+          <div className="text-xs uppercase tracking-wide text-gray-500">Navigation</div>
+        </div>
+        {Nav}
+      </aside>
 
-      <nav className="space-y-1">
-        <Link href="/dashboard" className="block px-2">
-          <div className="group flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-gray-300 hover:bg-white/5">
-            <span>🏠</span><span>Dashboard</span>
-          </div>
-        </Link>
-
-        <Link href="/scraped-packages" className="block px-2">
-          <div className="group flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-gray-300 hover:bg-white/5">
-            <span>📦</span><span>Scraped Packages</span>
-          </div>
-        </Link>
-
-        <Link href="/tags" className="block px-2">
-          <div className="group flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-gray-300 hover:bg-white/5">
-            <span>🏷️</span><span>Tags</span>
-          </div>
-        </Link>
-<Link href="/inventory-filler" className="block px-2">
-          <div className="group flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-gray-300 hover:bg-white/5">
-            <span>🧮</span><span>Inventory filler</span>
-          </div>
-        </Link>
-        {/* New: Inventory list */}
-        <Link href="/inventory" className="block px-2">
-          <div className="group flex items-center gap-3 rounded-lg px-3 py-2 text-sm text-gray-300 hover:bg-white/5">
-            <span>📋</span><span>Inventory</span>
-          </div>
-        </Link>
-
-        {/* Inventory filler (manual entry) — different icon from Scraped Packages */}
-        
-      </nav>
-    </aside>
+      {/* Mobile drawer + backdrop */}
+      {open && (
+        <div className="fixed inset-0 z-40 lg:hidden" role="dialog" aria-modal="true">
+          <div className="absolute inset-0 bg-black/50" onClick={close} />
+          <aside
+            className="absolute inset-y-0 left-0 w-72 max-w-[85vw] border-r border-white/5 bg-[#0b0f16] p-3 shadow-xl"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="mb-3 px-2 flex items-center justify-between">
+              <div className="text-xs uppercase tracking-wide text-gray-500">Navigation</div>
+              <button
+                className="btn btn-outline text-xs"
+                onClick={close}
+                aria-label="Close navigation"
+              >
+                ✕
+              </button>
+            </div>
+            {Nav}
+          </aside>
+        </div>
+      )}
+    </>
   );
 }
 
@@ -5629,19 +6262,26 @@ export type FJShippedResult = {
   packages: FJPackage[];
 };
 
-const PROFILE_DIR = process.env.FJ_PROFILE_DIR || '.secrets/fj-profile';
+// Match your login helper’s path by default
+const PROFILE_DIR = process.env.FJ_PROFILE_DIR || '/home/oulette/.proxy-profiles/fj-profile';
 const DEBUG = process.env.DEBUG_SCRAPER === '1';
+const KEEP_OPEN = process.env.KEEP_FJ_BROWSER_OPEN === '1';
 
 function decodeUrlMaybe(u?: string): string {
   if (!u) return '';
-  try {
-    return decodeURIComponent(u);
-  } catch {
-    return u;
-  }
+  try { return decodeURIComponent(u); } catch { return u; }
 }
 
-export async function scrapeFromJapanShippedList(url: string): Promise<FJShippedResult> {
+function asNumber(v: unknown): number | undefined {
+  return typeof v === 'number' && Number.isFinite(v) ? v : undefined;
+}
+
+/**
+ * Scrape the shipped list. Supports multi-page by POSTing { currentPage } to the list endpoint.
+ * @param url e.g. https://www.fromjapan.co.jp/japan/en/member/history/ship/list
+ * @param page 1-based page number. Page 1 loads directly; page>1 fetched via POST and injected.
+ */
+export async function scrapeFromJapanShippedList(url: string, page: number = 1): Promise<FJShippedResult> {
   const absProfile = path.resolve(PROFILE_DIR);
   if (!fs.existsSync(absProfile)) {
     throw new Error(`FromJapan profile not found at ${absProfile}. Run the profile initializer to login first.`);
@@ -5649,7 +6289,7 @@ export async function scrapeFromJapanShippedList(url: string): Promise<FJShipped
 
   const context = await chromium.launchPersistentContext(absProfile, {
     channel: 'chrome',
-    headless: false, // keep visible while stabilizing; try true later if it still works
+    headless: false, // visible while stabilizing
     viewport: { width: 1366, height: 900 },
     locale: 'en-US',
     userAgent:
@@ -5657,91 +6297,132 @@ export async function scrapeFromJapanShippedList(url: string): Promise<FJShipped
     extraHTTPHeaders: { 'Accept-Language': 'en-US,en;q=0.9,ja;q=0.8' },
   });
 
-  const page = await context.newPage();
+  const pageObj = await context.newPage();
   try {
-    await page.goto(url, { waitUntil: 'domcontentloaded' });
+    // 1) Load base list page to ensure session cookies are applied
+    await pageObj.goto(url, { waitUntil: 'domcontentloaded' });
 
-    // Wait for the embedded data blob to exist (it's a hidden script tag)
-    await page.waitForSelector('script#bData', { state: 'attached', timeout: 20000 });
+    // If requesting page > 1, POST { currentPage } and inject that HTML so we can reuse the same parser
+    if (Number(page) > 1) {
+      const resp = await context.request.post(url, {
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        form: { currentPage: String(page) },
+      });
+      if (!resp.ok()) {
+        throw new Error(`FJ list POST failed for page ${page}: ${resp.status()} ${resp.statusText()}`);
+      }
+      const html = await resp.text();
+      await pageObj.setContent(html, { waitUntil: 'domcontentloaded' });
+    }
 
-    // Pull and parse the JSON embedded in #bData
-    const shipments = await page.evaluate(() => {
-      const script = document.querySelector<HTMLScriptElement>('script#bData');
-      if (!script) return [];
+    // 2) Wait for the embedded data blob to exist AND be non-empty
+    await pageObj.waitForSelector('script#bData', { state: 'attached', timeout: 20000 }).catch(() => {});
+    await pageObj.waitForFunction(() => {
+      const s = document.querySelector<HTMLScriptElement>('script#bData');
+      return !!(s && (s.textContent || '').trim().length > 10);
+    }, { timeout: 20000 }).catch(() => { /* fallback paths below */ });
 
-      let data: any = {};
-      try {
-        // The content is base64 JSON
-        const b64 = script.textContent || '';
-        const decoded = atob(b64);
-        data = JSON.parse(decoded);
-      } catch (e) {
-        return [];
+    // 3) Pull and parse the JSON embedded in #bData (robust: base64 → JSON → window.bData → inline assignment)
+    const shipments = await pageObj.evaluate(() => {
+      function tryParse(raw: string | null | undefined): any | null {
+        if (!raw) return null;
+        raw = raw.trim();
+        if (!raw) return null;
+        // base64 first
+        try { return JSON.parse(atob(raw)); } catch {}
+        // plain JSON
+        try { return JSON.parse(raw); } catch {}
+        return null;
       }
 
-      // Each entry in data.list is a shipment
-      const list: any[] = Array.isArray(data.list) ? data.list : [];
-      const result: any[] = [];
-
-      for (const shp of list) {
-        // Prefer shipment_no; fallback to iid (numeric stable id)
-        const shipmentNo: string | undefined =
-          (shp.shipment_no_str as string) ||
-          (shp.shipment_no as string) ||
-          (shp.iid != null ? String(shp.iid) : undefined);
-
-        if (!shipmentNo) continue;
-
-        // Date shipped (YYYY-MM-DD from shipped_date)
-        let dateShipped: string | undefined;
-        if (typeof shp.shipped_date === 'string') {
-          const m = shp.shipped_date.match(/\d{4}-\d{2}-\d{2}/);
-          if (m) dateShipped = m[0];
+      function extractBData(): any | null {
+        // a) <script id="bData">...</script>
+        const script = document.querySelector<HTMLScriptElement>('script#bData');
+        if (script) {
+          const parsed = tryParse(script.textContent || '');
+          if (parsed) return parsed;
         }
 
-        // Tracking numbers: keys of ship_no object
-        const trackingNumbers: string[] = [];
-        if (shp.ship_no && typeof shp.ship_no === 'object') {
-          for (const key of Object.keys(shp.ship_no)) {
-            if (key && typeof key === 'string') trackingNumbers.push(key.trim());
+        // b) window.bData (string or object)
+        const w: any = window as any;
+        if (w && w.bData != null) {
+          if (typeof w.bData === 'string') {
+            const parsed = tryParse(w.bData);
+            if (parsed) return parsed;
+          } else if (typeof w.bData === 'object') {
+            return w.bData;
           }
         }
 
-        // Shipment-level shipping cost (Charge 2)
-        const charge2Total: number = typeof shp.c2_total === 'number' ? shp.c2_total : 0;
+        // c) inline assignment like: var bData = "....";
+        for (const sc of Array.from(document.querySelectorAll('script'))) {
+          const txt = (sc.textContent || '').trim();
+          if (!txt) continue;
+          const m = txt.match(/bData\s*=\s*(['"])([\s\S]*?)\1/);
+          if (m && m[2]) {
+            const parsed = tryParse(m[2]);
+            if (parsed) return parsed;
+          }
+        }
 
-        // Items
-        const itemsRaw: any[] = Array.isArray(shp.items) ? shp.items : [];
-        const items = itemsRaw.map((it) => {
-          const title = (it.item_name as string) || '';
-          const itemUrl = decodeURIComponent((it.item_url as string) || '');
-          const listingId = (it.item_id as string) || undefined; // Yahoo auction ID, etc.
-          const priceYen = typeof it.c1_total === 'number' ? it.c1_total : undefined; // Charge 1
+        return null;
+      }
 
-          return {
-            listingId,
-            orderNumber: undefined, // not available in the JSON
-            title,
-            itemUrl,
-            priceYen,
-          };
-        });
+      const data = extractBData() || {};
+      const list: any[] =
+        Array.isArray((data as any).list) ? (data as any).list :
+        Array.isArray((data as any)?.data?.list) ? (data as any).data.list :
+        [];
 
-        result.push({
-          dateShipped,
-          shipmentNo,
-          trackingNumbers,
-          items,
-          charge2Total,
-        });
+      const result: any[] = [];
+
+      for (const shp of list) {
+        try {
+          // Prefer shipment_no; fallback to iid (numeric stable id)
+          const shipmentNo: string | undefined =
+            (shp.shipment_no_str as string) ||
+            (shp.shipment_no as string) ||
+            (shp.iid != null ? String(shp.iid) : undefined);
+          if (!shipmentNo) continue;
+
+          // Date shipped (YYYY-MM-DD from shipped_date)
+          let dateShipped: string | undefined;
+          if (typeof shp.shipped_date === 'string') {
+            const m = shp.shipped_date.match(/\d{4}-\d{2}-\d{2}/);
+            if (m) dateShipped = m[0];
+          }
+
+          // Tracking numbers: keys of ship_no object
+          const trackingNumbers: string[] = [];
+          if (shp.ship_no && typeof shp.ship_no === 'object') {
+            for (const key of Object.keys(shp.ship_no)) {
+              if (key && typeof key === 'string') trackingNumbers.push(key.trim());
+            }
+          }
+
+          // Shipment-level shipping cost (Charge 2)
+          const charge2Total: number = typeof shp.c2_total === 'number' ? shp.c2_total : 0;
+
+          // Items (Charge 1 per item)
+          const itemsRaw: any[] = Array.isArray(shp.items) ? shp.items : [];
+          const items = itemsRaw.map((it) => {
+            const title = (it.item_name as string) || '';
+            const itemUrl = decodeURIComponent((it.item_url as string) || '');
+            const listingId = (it.item_id as string) || undefined; // Yahoo auction ID, etc.
+            const priceYen = typeof it.c1_total === 'number' ? it.c1_total : undefined; // Charge 1
+            return { listingId, orderNumber: undefined, title, itemUrl, priceYen };
+          });
+
+          result.push({ dateShipped, shipmentNo, trackingNumbers, items, charge2Total });
+        } catch {
+          // ignore malformed rows
+        }
       }
 
       return result;
     });
 
-    // Expand multi-package:
-    // - Split Charge 2 evenly per package
-    // - DISTRIBUTE ITEMS across packages (no duplication, no price division)
+    // 4) Expand multi-package (split charge2 evenly; ITEMS distribution with special single-item split rule)
     const packages: FJPackage[] = [];
     for (const s of shipments as any[]) {
       if (!s.shipmentNo) continue;
@@ -5749,25 +6430,46 @@ export async function scrapeFromJapanShippedList(url: string): Promise<FJShipped
       const nPkgs = Math.max(1, s.trackingNumbers?.length || 1);
       const perPkgShip = s.charge2Total ? s.charge2Total / nPkgs : 0;
 
-      // copy items and KEEP their full prices
       const allItems: FJItem[] = (s.items || []).map((it: any) => ({
         listingId: it.listingId,
         orderNumber: it.orderNumber,
         title: it.title,
-        itemUrl: it.itemUrl,
-        priceYen: typeof it.priceYen === 'number' ? it.priceYen : undefined,
+        itemUrl: decodeUrlMaybe(it.itemUrl),
+        priceYen: asNumber(it.priceYen),
       }));
 
-      // Even block distribution: first packages get the extra items
+      // SPECIAL CASE:
+      // If there's exactly 1 item but multiple parcels, duplicate the item across all parcels
+      // and split its price evenly (integers, sum preserved).
+      const singleItemSplit = nPkgs > 1 && allItems.length === 1;
+
+      // Even block distribution (default)
       const m = allItems.length;
       const base = Math.floor(m / nPkgs);
       const extra = m % nPkgs;
       let cursor = 0;
 
       for (let i = 0; i < nPkgs; i++) {
-        const pkgCount = base + (i < extra ? 1 : 0);
-        const pkgItems = allItems.slice(cursor, cursor + pkgCount);
-        cursor += pkgCount;
+        let pkgItems: FJItem[];
+
+        if (singleItemSplit) {
+          const original = allItems[0];
+          let share: number | undefined = undefined;
+
+          if (typeof original.priceYen === 'number') {
+            const total = Math.round(original.priceYen);
+            const per = Math.floor(total / nPkgs);
+            const remainder = total - per * nPkgs;
+            // Distribute remainder to the first 'remainder' packages
+            share = per + (i < remainder ? 1 : 0);
+          }
+
+          pkgItems = [{ ...original, priceYen: share }];
+        } else {
+          const pkgCount = base + (i < extra ? 1 : 0);
+          pkgItems = allItems.slice(cursor, cursor + pkgCount);
+          cursor += pkgCount;
+        }
 
         const pkgSuffix = nPkgs > 1 ? `#${i + 1}` : '';
         const packageNumber = `${s.shipmentNo}${pkgSuffix}`;
@@ -5785,13 +6487,23 @@ export async function scrapeFromJapanShippedList(url: string): Promise<FJShipped
       }
     }
 
-    if (DEBUG) console.log(`[FJ] scraped shipments=${shipments.length}, packages=${packages.length}`);
+    if ((packages.length === 0) && !Number.isNaN(page)) {
+      await pageObj.screenshot({ path: '/tmp/fj-empty.png', fullPage: true }).catch(() => {});
+    }
+
+    if (DEBUG) console.log(`[FJ] scraped shipments=${(shipments as any[]).length}, packages=${packages.length} (page ${page})`);
     return { proxyName: 'fromjapan', pageUrl: url, packages };
   } finally {
-    await page.close();
-    await context.close();
+    if (!KEEP_OPEN) {
+      await pageObj.close().catch(() => {});
+      await context.close().catch(() => {});
+    } else if (DEBUG) {
+      // eslint-disable-next-line no-console
+      console.log('[FJ] KEEP_FJ_BROWSER_OPEN=1 set — leaving browser open.');
+    }
   }
 }
+
 ```
 
 ---
@@ -6232,6 +6944,562 @@ async function main() {
 }
 
 main().catch(err => {
+  console.error(err);
+  process.exit(1);
+});
+
+```
+
+---
+
+## src/scripts/games/import-libretro-tags.cjs
+
+```js
+#!/usr/bin/env node
+/* eslint-disable no-console */
+/**
+ * Import game tags from a Libretro JSON file into your Tag tree.
+ *
+ * - Interactive TagPlacement chooser (browse by numbers; 'b' back; 's' select; 'q' quit)
+ * - Creates Tag(name=serial) only if serial contains '-'
+ * - Tag.description = title, Tag.photoUrl = boxartUrl
+ * - Places each Tag under the selected branch (TagPlacement)
+ * - Rebuilds PlacementClosure at the end
+ *
+ * Usage:
+ *   node scripts/games/import-libretro-tags.cjs --json "data/games/libretro/Nintendo - Game Boy.json"
+ *   # optional:
+ *   --parent <placementId>  (skip the interactive picker)
+ *   --dry-run               (no DB writes)
+ *   --force-photo           (overwrite Tag.photoUrl if already set)
+ */
+
+const fs = require('fs');
+const path = require('path');
+const readline = require('readline');
+const { PrismaClient } = require('@prisma/client');
+
+const prisma = new PrismaClient();
+
+// ───────────────────────────────────────────────────────────────────────────────
+// CLI
+// ───────────────────────────────────────────────────────────────────────────────
+const args = new Map();
+for (let i = 2; i < process.argv.length; i++) {
+  const k = process.argv[i];
+  const v = process.argv[i + 1];
+  if (k && k.startsWith('--')) {
+    if (v && !v.startsWith('--')) { args.set(k.slice(2), v); i++; }
+    else { args.set(k.slice(2), true); }
+  }
+}
+const JSON_PATH = args.get('json');
+const PARENT_PLACEMENT = args.get('parent') || null;
+const DRY_RUN = !!args.get('dry-run');
+const FORCE_PHOTO = !!args.get('force-photo');
+
+if (!JSON_PATH) {
+  console.error('❌ Missing --json <file>');
+  process.exit(1);
+}
+
+function readJsonArray(p) {
+  const raw = fs.readFileSync(p, 'utf8');
+  const data = JSON.parse(raw);
+  if (!Array.isArray(data)) throw new Error('JSON must be an array of { title, serial, boxartUrl, ... }');
+  return data;
+}
+
+// ───────────────────────────────────────────────────────────────────────────────
+// Tag tree utilities
+// ───────────────────────────────────────────────────────────────────────────────
+async function loadPlacementsTree() {
+  const rows = await prisma.tagPlacement.findMany({
+    select: {
+      id: true,
+      tagId: true,
+      parentPlacementId: true,
+      tag: { select: { id: true, name: true, description: true } },
+    },
+  });
+
+  const byParent = new Map();
+  for (const r of rows) {
+    const k = r.parentPlacementId === null ? 'root' : r.parentPlacementId;
+    if (!byParent.has(k)) byParent.set(k, []);
+    byParent.get(k).push(r);
+  }
+  // sort children by tag.name for stable UX
+  for (const arr of byParent.values()) arr.sort((a, b) => a.tag.name.localeCompare(b.tag.name));
+
+  function build(parentId) {
+    const key = parentId === null ? 'root' : parentId;
+    const kids = byParent.get(key) || [];
+    return kids.map((r) => ({
+      placementId: r.id,
+      tagId: r.tagId,
+      name: r.tag.name,
+      description: r.tag.description || '',
+      children: build(r.id),
+    }));
+  }
+  return build(null);
+}
+
+function printMenu(nodes, pathNames) {
+  console.log('\nPath:', pathNames.length ? pathNames.join(' › ') : '(root)');
+  if (!nodes.length) {
+    console.log('(no children here)');
+  } else {
+    nodes.forEach((n, i) => console.log(`${String(i + 1).padStart(2, ' ')}. ${n.name}`));
+  }
+  console.log("\nChoose a number, 'b' = back, 's' = select here, 'q' = quit");
+}
+
+async function pickPlacementInteractively() {
+  const roots = await loadPlacementsTree();
+  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+  const ask = (q) => new Promise((res) => rl.question(q, (a) => res(a.trim())));
+
+  const stack = []; // stack of { nodes, index, name }
+  let currentNodes = roots;
+  let pathNames = [];
+
+  while (true) {
+    printMenu(currentNodes, pathNames);
+    const ans = await ask('> ');
+    if (ans === 'q') { rl.close(); process.exit(0); }
+    if (ans === 's') {
+      // selecting "here": return parent placement (the current list's parent)
+      const parentPlacementId = stack.length ? stack[stack.length - 1].node.placementId : null;
+      rl.close();
+      return parentPlacementId;
+    }
+    if (ans === 'b') {
+      if (stack.length) {
+        const popped = stack.pop();
+        currentNodes = stack.length ? stack[stack.length - 1].node.children : roots;
+        pathNames = pathNames.slice(0, -1);
+      } else {
+        console.log('(already at root)');
+      }
+      continue;
+    }
+    const idx = parseInt(ans, 10);
+    if (!Number.isFinite(idx) || idx < 1 || idx > currentNodes.length) {
+      console.log('Invalid choice.');
+      continue;
+    }
+    const chosen = currentNodes[idx - 1];
+    stack.push({ node: chosen });
+    pathNames.push(chosen.name);
+    currentNodes = chosen.children;
+  }
+}
+
+// ensure TagPlacement(tagId under parentPlacementId) exists
+async function ensurePlacement(tagId, parentPlacementId) {
+  const existing = await prisma.tagPlacement.findFirst({
+    where: { tagId, parentPlacementId: parentPlacementId ?? null },
+    select: { id: true },
+  });
+  if (existing) return existing.id;
+  const created = await prisma.tagPlacement.create({
+    data: { tagId, parentPlacementId: parentPlacementId ?? null },
+    select: { id: true },
+  });
+  return created.id;
+}
+
+// rebuild PlacementClosure (BFS from every node)
+async function rebuildPlacementClosureAll() {
+  await prisma.placementClosure.deleteMany({});
+  const placements = await prisma.tagPlacement.findMany({
+    select: { id: true, parentPlacementId: true },
+  });
+  if (!placements.length) return;
+
+  // self-rows
+  await prisma.placementClosure.createMany({
+    data: placements.map((p) => ({
+      ancestorPlacementId: p.id,
+      descendantPlacementId: p.id,
+      depth: 0,
+    })),
+    skipDuplicates: true,
+  });
+
+  const childrenByParent = new Map();
+  for (const p of placements) {
+    const k = p.parentPlacementId;
+    if (!childrenByParent.has(k)) childrenByParent.set(k, []);
+    childrenByParent.get(k).push(p.id);
+  }
+
+  const toInsert = [];
+  for (const anc of placements) {
+    const q = [{ id: anc.id, depth: 0 }];
+    const seen = new Set([anc.id]);
+    while (q.length) {
+      const { id, depth } = q.shift();
+      const kids = childrenByParent.get(id) || [];
+      for (const ch of kids) {
+        if (!seen.has(ch)) {
+          seen.add(ch);
+          toInsert.push({
+            ancestorPlacementId: anc.id,
+            descendantPlacementId: ch,
+            depth: depth + 1,
+          });
+          q.push({ id: ch, depth: depth + 1 });
+        }
+      }
+    }
+  }
+  if (toInsert.length) {
+    // chunk to avoid giant single payloads
+    const CHUNK = 1000;
+    for (let i = 0; i < toInsert.length; i += CHUNK) {
+      await prisma.placementClosure.createMany({
+        data: toInsert.slice(i, i + CHUNK),
+        skipDuplicates: true,
+      });
+    }
+  }
+}
+
+// ───────────────────────────────────────────────────────────────────────────────
+// Import logic
+// ───────────────────────────────────────────────────────────────────────────────
+function sanitizeSerial(serial) {
+  if (!serial || typeof serial !== 'string') return null;
+  const s = serial.trim();
+  if (!s.includes('-')) return null; // rule: must contain dash
+  return s;
+}
+
+async function importFromJson(file, parentPlacementId) {
+  const records = readJsonArray(file);
+
+  let createdTags = 0;
+  let updatedDesc = 0;
+  let updatedPhoto = 0;
+  let createdPlacements = 0;
+  let skippedNoDash = 0;
+
+  let i = 0;
+  for (const rec of records) {
+    i++;
+    const title = (rec.title || '').trim();
+    const serial = sanitizeSerial(rec.serial);
+    const boxartUrl = (rec.boxartUrl || '').trim();
+
+    if (!serial) {
+      skippedNoDash++;
+      continue;
+    }
+
+    let tag = await prisma.tag.findUnique({ where: { name: serial } });
+    if (!tag) {
+      if (DRY_RUN) {
+        createdTags++;
+      } else {
+        tag = await prisma.tag.create({
+          data: {
+            name: serial,
+            description: title || null,
+            photoUrl: boxartUrl || null,
+          },
+        });
+        createdTags++;
+      }
+    } else {
+      const patch = {};
+      if (!tag.description && title) { patch.description = title; updatedDesc++; }
+      if ((FORCE_PHOTO && boxartUrl) || (!tag.photoUrl && boxartUrl)) { patch.photoUrl = boxartUrl; updatedPhoto++; }
+      if (!DRY_RUN && Object.keys(patch).length) {
+        tag = await prisma.tag.update({ where: { id: tag.id }, data: patch });
+      }
+    }
+
+    if (!DRY_RUN) {
+      const existed = await prisma.tagPlacement.findFirst({
+        where: { tagId: tag.id, parentPlacementId: parentPlacementId ?? null },
+        select: { id: true },
+      });
+      if (!existed) {
+        await ensurePlacement(tag.id, parentPlacementId);
+        createdPlacements++;
+      }
+    } else {
+      createdPlacements++;
+    }
+
+    if (i % 100 === 0) {
+      console.log(`… processed ${i}/${records.length}`);
+    }
+  }
+
+  return { createdTags, updatedDesc, updatedPhoto, createdPlacements, skippedNoDash, total: records.length };
+}
+
+// ───────────────────────────────────────────────────────────────────────────────
+// Main
+// ───────────────────────────────────────────────────────────────────────────────
+(async function main() {
+  try {
+    const parentPlacementId = PARENT_PLACEMENT || await pickPlacementInteractively();
+
+    console.log('\n--- Import starting ---');
+    console.log('JSON:', path.resolve(JSON_PATH));
+    console.log('Parent placement:', parentPlacementId ?? '(root)');
+    console.log('Dry run:', DRY_RUN ? 'YES' : 'NO');
+    console.log('Force photo overwrite:', FORCE_PHOTO ? 'YES' : 'NO');
+
+    const stats = await importFromJson(JSON_PATH, parentPlacementId);
+
+    console.log('\nStats:');
+    console.log(`  Total records:           ${stats.total}`);
+    console.log(`  Skipped (no dash):       ${stats.skippedNoDash}`);
+    console.log(`  Created tags:            ${stats.createdTags}`);
+    console.log(`  Updated descriptions:    ${stats.updatedDesc}`);
+    console.log(`  Updated photoUrl:        ${stats.updatedPhoto}`);
+    console.log(`  Created placements:      ${stats.createdPlacements}`);
+
+    if (!DRY_RUN) {
+      console.log('\nRebuilding PlacementClosure…');
+      await rebuildPlacementClosureAll();
+    }
+
+    console.log('\n✅ Done.');
+  } catch (e) {
+    console.error('❌', e);
+    process.exit(1);
+  } finally {
+    await prisma.$disconnect();
+  }
+})();
+
+```
+
+---
+
+## src/scripts/games/scrape-libretro.mjs
+
+```js
+#!/usr/bin/env node
+/**
+ * Crawl Libretro Database for a given platform and save a JSON catalog:
+ *   - title, region, serial, detailUrl, boxartUrl
+ *
+ * Example:
+ *   node scripts/games/scrape-libretro.mjs --platform "Nintendo - Game Boy"
+ */
+
+import fs from "fs/promises";
+import path from "path";
+
+const DB_BASE = "https://db.libretro.com";
+const THUMB_BASE = "https://thumbnails.libretro.com";
+const OUTPUT_DIR = path.join("data", "games", "libretro");
+const DEFAULT_DELAY_MS = Number(process.env.LIBRETRO_SCRAPE_DELAY_MS || 150);
+
+// ---------------- CLI ----------------
+function parseArgs(argv) {
+  const args = { platform: null, out: null };
+  for (let i = 2; i < argv.length; i++) {
+    const a = argv[i];
+    if (a === "--platform" || a === "-p") args.platform = argv[++i];
+    else if (a === "--out" || a === "-o") args.out = argv[++i];
+    else if (a === "--help" || a === "-h") {
+      console.log(`Usage:
+  node scripts/games/scrape-libretro.mjs --platform "Nintendo - Game Boy" [--out custom.json]
+
+Env:
+  LIBRETRO_SCRAPE_DELAY_MS  throttle between requests (default ${DEFAULT_DELAY_MS}ms)
+`);
+      process.exit(0);
+    }
+  }
+  if (!args.platform) {
+    console.error('Missing --platform (e.g., "Nintendo - Game Boy")');
+    process.exit(1);
+  }
+  return args;
+}
+
+// ------------- Helpers ---------------
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+function encodePath(p) {
+  // encode each path segment (space -> %20 etc.), keep slashes
+  return p.split("/").map((seg) => encodeURIComponent(seg)).join("/");
+}
+function platformIndexUrl(platform, pageIndex) {
+  return `${DB_BASE}/${encodePath(platform)}/index-${pageIndex}.html`;
+}
+function absoluteUrl(href, platform) {
+  if (/^https?:\/\//i.test(href)) return href;
+  let rel = href.replace(/^\//, "");
+
+  // If rel already includes the platform segment (raw or encoded), don't prepend it again.
+  const platRaw = `${platform}/`;
+  const platEnc = `${encodePath(platform)}/`;
+  if (rel.startsWith(platRaw) || rel.startsWith(platEnc)) {
+    const encodedRel = /%[0-9A-Fa-f]{2}/.test(rel) ? rel : encodePath(rel);
+    return `${DB_BASE}/${encodedRel}`;
+  }
+
+  const encodedRel = /%[0-9A-Fa-f]{2}/.test(rel) ? rel : encodePath(rel);
+  return `${DB_BASE}/${encodePath(platform)}/${encodedRel}`;
+}
+
+function sanitizeForBoxartName(name) {
+  // libretro-thumbnails rule: replace &*/:`<>?\|" with "_"
+  return name.replace(/[&*\/:`<>?\\|"]/g, "_");
+}
+function boxartUrl(platform, displayName) {
+  const file = sanitizeForBoxartName(displayName) + ".png";
+  return `${THUMB_BASE}/${encodePath(platform)}/Named_Boxarts/${encodePath(file)}`;
+}
+function matchAll(regex, str) {
+  const out = [];
+  let m;
+  while ((m = regex.exec(str))) out.push(m);
+  return out;
+}
+function extractTitleFromDetail(html, fallbackFromUrl) {
+  const m = html.match(/<h1[^>]*>\s*([^<]+?)\s*<\/h1>/i);
+  if (m && m[1]) return decodeHtml(m[1].trim());
+  if (fallbackFromUrl) {
+    const seg = fallbackFromUrl.replace(/\.html?$/i, "").replace(/_/g, " ");
+    try { return decodeURIComponent(seg); } catch { return seg; }
+  }
+  return null;
+}
+function decodeHtml(s) {
+  return s
+    .replace(/&amp;/g, "&")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">");
+}
+function extractRegionFromTitle(title) {
+  const m = title && title.match(/\(([^)]+)\)\s*$/);
+  return m ? m[1] : null;
+}
+
+// Robust serial extraction
+function extractSerial(html) {
+  // A: simple text (works when no tags in between)
+  let m = html.match(/Serial:\s*([A-Za-z0-9][A-Za-z0-9._\-\/]+)\b/i);
+  if (m) return m[1];
+
+  // B: value appears after closing tag following "Serial"
+  // e.g., <strong>Serial</strong>: <span>DMG-XXXX-YYY</span>
+  m = html.match(/>Serial<\/[^>]*>[^<]*:\s*<\/?[^>]*>\s*([A-Za-z0-9][A-Za-z0-9._\-\/]+)/i);
+  if (m) return m[1];
+
+  // C: generic — find "Serial" label then scan the next ~120 chars for a token
+  const pos = html.search(/Serial\b/i);
+  if (pos !== -1) {
+    const tail = html.slice(pos, pos + 200);
+    const m2 = tail.match(/Serial[^<:]*:?[^A-Za-z0-9._\-\/]{0,10}([A-Za-z0-9][A-Za-z0-9._\-\/]+)/i);
+    if (m2) return m2[1];
+  }
+
+  // D: strip tags and retry on plaintext
+  const plain = html.replace(/<[^>]+>/g, " ");
+  m = plain.match(/Serial:\s*([A-Za-z0-9][A-Za-z0-9._\-\/]+)\b/i);
+  if (m) return m[1];
+
+  return null;
+}
+
+// -------------- Fetch ----------------
+async function get(url) {
+  const res = await fetch(url, { headers: { "User-Agent": "dash-scraper/1.0" } });
+  if (!res.ok) throw new Error(`GET ${url} → ${res.status}`);
+  return res.text();
+}
+
+async function crawlIndex(platform) {
+  const links = [];
+  let page = 0;
+  while (true) {
+    const url = platformIndexUrl(platform, page);
+    let html;
+    try {
+      html = await get(url);
+    } catch (e) {
+      if (page === 0) throw e;
+      break; // end of pages
+    }
+
+    // "See details" anchors; href may be just "<title>.html" OR "<platform>/<title>.html"
+    const pageLinks = matchAll(/<a\s+href="([^"]+?\.html)".*?>\s*See details\s*<\/a>/gi, html)
+      .map((m) => m[1]); // keep href as-is
+
+    if (!pageLinks.length) break;
+    links.push(...pageLinks);
+    page++;
+    await sleep(DEFAULT_DELAY_MS);
+  }
+  return links;
+}
+
+async function scrapeDetail(platform, href) {
+  const url = absoluteUrl(href, platform);
+  const html = await get(url);
+
+  // Serial (robust)
+  const serial = extractSerial(html);
+
+  // Title (prefer <h1>, fallback to file name)
+  const fileName = href.split("/").pop() || "";
+  const displayTitle = extractTitleFromDetail(html, fileName) || fileName.replace(/\.html?$/i, "");
+  const region = extractRegionFromTitle(displayTitle);
+
+  return {
+    platform,
+    title: displayTitle,
+    region,
+    serial,
+    detailUrl: url,
+    boxartUrl: boxartUrl(platform, displayTitle),
+  };
+}
+
+// --------------- Main ----------------
+async function main() {
+  const { platform, out } = parseArgs(process.argv);
+
+  console.log(`[libretro] Crawling platform: ${platform}`);
+  const detailHrefs = await crawlIndex(platform);
+  console.log(`[libretro] Found ${detailHrefs.length} detail pages`);
+
+  const outRecords = [];
+  let i = 0;
+  for (const href of detailHrefs) {
+    i++;
+    try {
+      const rec = await scrapeDetail(platform, href);
+      outRecords.push(rec);
+      if (i % 25 === 0) console.log(`  … ${i}/${detailHrefs.length}`);
+    } catch (e) {
+      console.warn(`  ! Failed on ${href}: ${e.message}`);
+    }
+    await sleep(DEFAULT_DELAY_MS);
+  }
+
+  await fs.mkdir(OUTPUT_DIR, { recursive: true });
+  const outPath = out ? out : path.join(OUTPUT_DIR, `${platform}.json`);
+  await fs.writeFile(outPath, JSON.stringify(outRecords, null, 2), "utf8");
+  console.log(`[libretro] Wrote ${outRecords.length} records → ${outPath}`);
+}
+
+main().catch((err) => {
   console.error(err);
   process.exit(1);
 });
