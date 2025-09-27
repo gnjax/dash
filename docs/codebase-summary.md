@@ -1,8 +1,8 @@
 # Codebase Summary
 
-> Generated: 2025-09-27T15:08:18.535Z
-> Commit: 04f69467a845543e5531f6f96218a14e5cdc9484
-> Date: 2025-09-25 01:05:21 +0200
+> Generated: 2025-09-27T15:18:07.158Z
+> Commit: 3350336f061cb1378420daea275a2745513ca4e5
+> Date: 2025-09-27 17:08:18 +0200
 > Remote: git@github.com:gnjax/dash.git
 
 This file concatenates important text/code files in the repo so a single raw URL can be shared.
@@ -1198,17 +1198,17 @@ export async function GET(req: NextRequest) {
       manualLineId: true,
       fillEntryId: true,
       createdAt: true,
-      condition: true, // ✅ added
+      condition: true,
       tags: {
         select: {
-          tag: { select: { id: true, name: true } },
+          tag: { select: { id: true, name: true, description: true } }, // 👈 include description
           placementId: true,
         },
       },
     },
   });
 
-  // 2) Batch lookups for allocations (same logic as before)
+  // 2) Batch lookups for allocations
   const fillEntryIds = Array.from(new Set(items.map(i => i.fillEntryId).filter(Boolean) as string[]));
   const entries = fillEntryIds.length
     ? await prisma.inventoryFillEntry.findMany({
@@ -1244,40 +1244,18 @@ export async function GET(req: NextRequest) {
   const sessions = sessionIds.length
     ? await prisma.inventoryFillSession.findMany({
         where: { id: { in: sessionIds } },
-        select: {
-          id: true,
-          sourceType: true,
-          customsTotalYen: true,
-          scrapedPackageId: true,
-          manualPurchaseId: true,
-        },
+        select: { id: true, sourceType: true, scrapedPackageId: true, manualPurchaseId: true, customsTotalYen: true },
       })
     : [];
-  const sessionsById = new Map(sessions.map(s => [s.id, s]));
+  const sessById = new Map(sessions.map(s => [s.id, s]));
 
-  const allSessSourceItems = sessionIds.length
-    ? await prisma.inventoryFillSourceItem.findMany({
-        where: { sessionId: { in: sessionIds } },
-        select: { sessionId: true, scrapedItemId: true, manualLineId: true },
-      })
-    : [];
-  const sessToSourceItems = new Map<
-    string,
-    { scrapedItemId: string | null; manualLineId: string | null }[]
-  >();
-  for (const si of allSessSourceItems) {
-    const arr = sessToSourceItems.get(si.sessionId) ?? [];
-    arr.push({ scrapedItemId: si.scrapedItemId ?? null, manualLineId: si.manualLineId ?? null });
-    sessToSourceItems.set(si.sessionId, arr);
-  }
+  const scrapedIds = Array.from(new Set(sourceItems.map(s => s.scrapedItemId).filter(Boolean) as string[]));
+  const manualIds = Array.from(new Set(sourceItems.map(s => s.manualLineId).filter(Boolean) as string[]));
 
-  // Prices
-  const scrapedIds = Array.from(new Set(allSessSourceItems.map(si => si.scrapedItemId).filter(Boolean) as string[]));
-  const manualIds = Array.from(new Set(allSessSourceItems.map(si => si.manualLineId).filter(Boolean) as string[]));
   const scrapedItems = scrapedIds.length
     ? await prisma.scrapedItem.findMany({
         where: { id: { in: scrapedIds } },
-        select: { id: true, priceYen: true, scrapedPackageId: true },
+        select: { id: true, priceYen: true },
       })
     : [];
   const manualLines = manualIds.length
@@ -1319,11 +1297,12 @@ export async function GET(req: NextRequest) {
     : [];
   const manualById = new Map(manualPurchases.map(m => [m.id, m]));
 
-  // Build placement labels (Root > ... > Leaf) with leaf last
+  // Build placement labels (Root > ... > Leaf) and a placement "depth score" to pick the leaf-most description
   const placementIds = Array.from(
     new Set(items.flatMap(i => i.tags?.map(t => t.placementId).filter(Boolean) as string[] ?? [])),
   );
   const placementLabels = new Map<string, string>();
+  const placementDepthScore = new Map<string, number>(); // higher = deeper (more segments)
   if (placementIds.length) {
     const closures = await prisma.placementClosure.findMany({
       where: { descendantPlacementId: { in: placementIds } },
@@ -1346,6 +1325,7 @@ export async function GET(req: NextRequest) {
       // depth: 0=leaf, >0 ancestors. For root → ... → leaf order, sort DESC by depth.
       arr.sort((a, b) => b.depth - a.depth);
       placementLabels.set(desc, arr.map(x => x.name).join(' > '));
+      placementDepthScore.set(desc, arr.length); // more names = deeper in the tree
     }
   }
 
@@ -1354,17 +1334,31 @@ export async function GET(req: NextRequest) {
   for (const it of items) {
     const entry = it.fillEntryId ? entriesById.get(it.fillEntryId) : null;
 
+    // Preferred name = deepest tag.description (if any), else item.name
+    let preferredName = it.name;
+    let bestScore = -1;
+    for (const tp of (it.tags || [])) {
+      const desc = (tp as any).tag?.description?.trim();
+      if (!desc) continue;
+      const score = tp.placementId ? (placementDepthScore.get(tp.placementId) ?? 0) : 0;
+      if (score > bestScore) {
+        bestScore = score;
+        preferredName = desc;
+      }
+    }
+
     // even if no entry (should be rare), still render tags & minimal fields
     if (!entry) {
       const tagParts = (it.tags || []).map(tp => {
         const t = tp.tag?.name ?? '';
         const pname = tp.placementId ? (placementLabels.get(tp.placementId) || '') : '';
         return pname ? `${t} (${pname})` : t;
+        // NOTE: name already set to preferredName above
       });
       rows.push({
         id: it.id,
-        name: it.name,
-        condition: it.condition, // ✅ added
+        name: preferredName,
+        condition: it.condition,
         tagChain: tagParts.join(' • '),
         fxDateISO: null,
         packageNumber: null,
@@ -1388,18 +1382,23 @@ export async function GET(req: NextRequest) {
 
     // Package subtotal (JPY)
     let packageSubtotal = 0;
-    for (const s of (sessToSourceItems.get(entry.sessionId) ?? [])) {
-      if (s.scrapedItemId) packageSubtotal += scrapedPriceById.get(s.scrapedItemId) ?? 0;
-      else if (s.manualLineId) packageSubtotal += manualPriceById.get(s.manualLineId) ?? 0;
+    for (const s of (sessions.filter(ss => ss.id === entry.sessionId).length
+      ? sessions.filter(ss => ss.id === entry.sessionId)
+      : [])) {
+      const sis = Array.from(sourceItemsById.values()).filter(si => si.sessionId === s.id);
+      for (const si of sis) {
+        if (si.scrapedItemId) packageSubtotal += scrapedPriceById.get(si.scrapedItemId) ?? 0;
+        else if (si.manualLineId) packageSubtotal += manualPriceById.get(si.manualLineId) ?? 0;
+      }
     }
 
-    // Session meta
-    const sess = sessionsById.get(entry.sessionId)!;
+    // pkg shipping + fx date
     let pkgShipTotal = 0;
     let fxDateISO: string | null = null;
     let packageNumber: string | null = null;
     let purchaseDateISO: string | null = null;
 
+    const sess = sessById.get(entry.sessionId)!;
     if (sess.sourceType === 'ScrapedPackage' && sess.scrapedPackageId) {
       const pkg = scrapedPkgById.get(sess.scrapedPackageId) || null;
       const intl = toNum(pkg?.internationalShippingFeeYen ?? 0);
@@ -1427,7 +1426,13 @@ export async function GET(req: NextRequest) {
     let entryCustomsJPY = 0;
     if (packageSubtotal > 0) {
       const customsTotal = toNum(sess.customsTotalYen ?? 0);
-      const sourceShare = sourcePriceYen / packageSubtotal;
+      // source share is relative to session subtotal
+      const srcKey = src.scrapedItemId ?? src.manualLineId!;
+      const srcPrice =
+        src.scrapedItemId ? (scrapedPriceById.get(src.scrapedItemId) ?? 0)
+        : src.manualLineId ? (manualPriceById.get(src.manualLineId) ?? 0)
+        : 0;
+      const sourceShare = packageSubtotal > 0 ? (srcPrice / packageSubtotal) : 0;
       entryCustomsJPY = Math.round(customsTotal * sourceShare * (entryPricePPM / PPM_DENOM));
     }
 
@@ -1444,8 +1449,8 @@ export async function GET(req: NextRequest) {
 
     rows.push({
       id: it.id,
-      name: it.name,
-      condition: it.condition, // ✅ added
+      name: preferredName, // 👈 use tag description when available
+      condition: it.condition,
       tagChain: tagParts.join(' • '),
       fxDateISO,
       packageNumber,
