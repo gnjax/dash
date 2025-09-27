@@ -1,8 +1,8 @@
 # Codebase Summary
 
-> Generated: 2025-09-27T15:18:07.158Z
-> Commit: 3350336f061cb1378420daea275a2745513ca4e5
-> Date: 2025-09-27 17:08:18 +0200
+> Generated: 2025-09-27T21:33:29.797Z
+> Commit: 4c4d754fd1b44168a09b51649b5ced4073739c5e
+> Date: 2025-09-27 17:18:07 +0200
 > Remote: git@github.com:gnjax/dash.git
 
 This file concatenates important text/code files in the repo so a single raw URL can be shared.
@@ -1184,7 +1184,7 @@ export async function GET(req: NextRequest) {
     where = { AND: clauses };
   }
 
-  // 1) Page of items
+  // 1) Page of items — include tag.description + tag.photoUrl so UI can use both
   const items = await prisma.inventoryItem.findMany({
     take: limit,
     ...(cursor ? { skip: 1, cursor: { id: cursor } } : {}),
@@ -1201,12 +1201,12 @@ export async function GET(req: NextRequest) {
       condition: true,
       tags: {
         select: {
-          tag: { select: { id: true, name: true, description: true } }, // 👈 include description
+          tag: { select: { id: true, name: true, description: true, photoUrl: true } }, // + photoUrl
           placementId: true,
         },
       },
     },
-  });
+  }); // :contentReference[oaicite:0]{index=0}
 
   // 2) Batch lookups for allocations
   const fillEntryIds = Array.from(new Set(items.map(i => i.fillEntryId).filter(Boolean) as string[]));
@@ -1297,7 +1297,7 @@ export async function GET(req: NextRequest) {
     : [];
   const manualById = new Map(manualPurchases.map(m => [m.id, m]));
 
-  // Build placement labels (Root > ... > Leaf) and a placement "depth score" to pick the leaf-most description
+  // Build placement labels (Root > ... > Leaf) and a placement "depth score"
   const placementIds = Array.from(
     new Set(items.flatMap(i => i.tags?.map(t => t.placementId).filter(Boolean) as string[] ?? [])),
   );
@@ -1327,7 +1327,7 @@ export async function GET(req: NextRequest) {
       placementLabels.set(desc, arr.map(x => x.name).join(' > '));
       placementDepthScore.set(desc, arr.length); // more names = deeper in the tree
     }
-  }
+  } // :contentReference[oaicite:1]{index=1}
 
   // 3) Rows
   const rows: any[] = [];
@@ -1336,16 +1336,24 @@ export async function GET(req: NextRequest) {
 
     // Preferred name = deepest tag.description (if any), else item.name
     let preferredName = it.name;
+    let previewPhotoUrl: string | null = null;
     let bestScore = -1;
     for (const tp of (it.tags || [])) {
-      const desc = (tp as any).tag?.description?.trim();
+      const t = (tp as any).tag;
+      const desc = t?.description?.trim();
       if (!desc) continue;
       const score = tp.placementId ? (placementDepthScore.get(tp.placementId) ?? 0) : 0;
       if (score > bestScore) {
         bestScore = score;
         preferredName = desc;
+        previewPhotoUrl = t?.photoUrl ?? null;
       }
     }
+    // Fallback: if no desc chosen but any tag has photo, surface it
+    if (!previewPhotoUrl) {
+      const withPhoto = (it.tags || []).find(tp => (tp as any).tag?.photoUrl);
+      previewPhotoUrl = withPhoto ? ((withPhoto as any).tag.photoUrl as string) : null;
+    } // :contentReference[oaicite:2]{index=2}
 
     // even if no entry (should be rare), still render tags & minimal fields
     if (!entry) {
@@ -1353,7 +1361,6 @@ export async function GET(req: NextRequest) {
         const t = tp.tag?.name ?? '';
         const pname = tp.placementId ? (placementLabels.get(tp.placementId) || '') : '';
         return pname ? `${t} (${pname})` : t;
-        // NOTE: name already set to preferredName above
       });
       rows.push({
         id: it.id,
@@ -1364,6 +1371,7 @@ export async function GET(req: NextRequest) {
         packageNumber: null,
         purchaseDateISO: null,
         jpy: { basePerUnit: 0, shipPerUnit: 0, customsPerUnit: 0, totalPerUnit: 0 },
+        previewPhotoUrl,
       });
       continue;
     }
@@ -1427,7 +1435,6 @@ export async function GET(req: NextRequest) {
     if (packageSubtotal > 0) {
       const customsTotal = toNum(sess.customsTotalYen ?? 0);
       // source share is relative to session subtotal
-      const srcKey = src.scrapedItemId ?? src.manualLineId!;
       const srcPrice =
         src.scrapedItemId ? (scrapedPriceById.get(src.scrapedItemId) ?? 0)
         : src.manualLineId ? (manualPriceById.get(src.manualLineId) ?? 0)
@@ -1449,7 +1456,7 @@ export async function GET(req: NextRequest) {
 
     rows.push({
       id: it.id,
-      name: preferredName, // 👈 use tag description when available
+      name: preferredName,            // prefer tag description
       condition: it.condition,
       tagChain: tagParts.join(' • '),
       fxDateISO,
@@ -1461,6 +1468,7 @@ export async function GET(req: NextRequest) {
         customsPerUnit: customsPerUnitJPY,
         totalPerUnit: totalPerUnitJPY,
       },
+      previewPhotoUrl,               // 👈 expose for hover preview
     });
   }
 
@@ -3389,6 +3397,8 @@ type Row = {
     customsPerUnit: number;
     totalPerUnit: number;
   };
+  // NEW: optional image preview sourced from the current tag
+  previewPhotoUrl?: string | null;
 };
 
 type ApiResp = { items: Row[]; nextCursor: string | null };
@@ -3405,6 +3415,45 @@ function fmtEUR(v: number | null | undefined) {
 function fmtJPY(v: number | null | undefined) {
   if (v == null || !isFinite(v)) return '¥0';
   return `¥${Math.round(v).toLocaleString()}`;
+}
+
+/** Floating image preview that follows the cursor on hover */
+function HoverFloat(props: { url: string | null | undefined; size?: number; children: React.ReactNode }) {
+  const { url, size = 220, children } = props;
+  const [show, setShow] = useState(false);
+  const [pos, setPos] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+
+  return (
+    <>
+      <span
+        className="inline-flex items-center"
+        onMouseEnter={() => url && setShow(true)}
+        onMouseLeave={() => setShow(false)}
+        onMouseMove={(e) => setPos({ x: e.clientX, y: e.clientY })}
+        style={{ cursor: url ? 'zoom-in' : undefined }}
+      >
+        {children}
+      </span>
+      {url && show && (
+        <div
+          className="fixed z-[9999] pointer-events-none"
+          style={{ left: pos.x + 12, top: pos.y + 12 }}
+        >
+          <div className="rounded-lg border border-white/10 bg-black/90 p-1 shadow-2xl">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={url}
+              alt=""
+              width={size}
+              height={size}
+              className="block object-contain max-w-none"
+              loading="eager"
+            />
+          </div>
+        </div>
+      )}
+    </>
+  );
 }
 
 export default function InventoryPage() {
@@ -3629,7 +3678,11 @@ export default function InventoryPage() {
                       aria-label={`Select ${r.name || r.id}`}
                     />
                   </td>
-                  <td className="px-3 py-2">{r.name || '—'}</td>
+                  <td className="px-3 py-2">
+                    <HoverFloat url={r.previewPhotoUrl} size={220}>
+                      <span>{r.name || '—'}</span>
+                    </HoverFloat>
+                  </td>
                   <td className="px-3 py-2">{r.tagChain || '—'}</td>
                   <td className="px-3 py-2">{r.condition || '—'}</td>
                   <td className="px-3 py-2">

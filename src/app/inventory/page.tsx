@@ -18,6 +18,8 @@ type Row = {
     customsPerUnit: number;
     totalPerUnit: number;
   };
+  // NEW: optional image preview sourced from the current tag
+  previewPhotoUrl?: string | null;
 };
 
 type ApiResp = { items: Row[]; nextCursor: string | null };
@@ -34,6 +36,45 @@ function fmtEUR(v: number | null | undefined) {
 function fmtJPY(v: number | null | undefined) {
   if (v == null || !isFinite(v)) return '¥0';
   return `¥${Math.round(v).toLocaleString()}`;
+}
+
+/** Floating image preview that follows the cursor on hover */
+function HoverFloat(props: { url: string | null | undefined; size?: number; children: React.ReactNode }) {
+  const { url, size = 220, children } = props;
+  const [show, setShow] = useState(false);
+  const [pos, setPos] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+
+  return (
+    <>
+      <span
+        className="inline-flex items-center"
+        onMouseEnter={() => url && setShow(true)}
+        onMouseLeave={() => setShow(false)}
+        onMouseMove={(e) => setPos({ x: e.clientX, y: e.clientY })}
+        style={{ cursor: url ? 'zoom-in' : undefined }}
+      >
+        {children}
+      </span>
+      {url && show && (
+        <div
+          className="fixed z-[9999] pointer-events-none"
+          style={{ left: pos.x + 12, top: pos.y + 12 }}
+        >
+          <div className="rounded-lg border border-white/10 bg-black/90 p-1 shadow-2xl">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={url}
+              alt=""
+              width={size}
+              height={size}
+              className="block object-contain max-w-none"
+              loading="eager"
+            />
+          </div>
+        </div>
+      )}
+    </>
+  );
 }
 
 export default function InventoryPage() {
@@ -258,7 +299,11 @@ export default function InventoryPage() {
                       aria-label={`Select ${r.name || r.id}`}
                     />
                   </td>
-                  <td className="px-3 py-2">{r.name || '—'}</td>
+                  <td className="px-3 py-2">
+                    <HoverFloat url={r.previewPhotoUrl} size={220}>
+                      <span>{r.name || '—'}</span>
+                    </HoverFloat>
+                  </td>
                   <td className="px-3 py-2">{r.tagChain || '—'}</td>
                   <td className="px-3 py-2">{r.condition || '—'}</td>
                   <td className="px-3 py-2">
