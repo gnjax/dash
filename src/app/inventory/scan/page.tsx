@@ -1,8 +1,12 @@
+// src/app/inventory/scan/page.tsx
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
+import { serverPpocr } from '@/lib/ocr/server-ppocr';
+ // NEW: PP-OCR via ONNX (client-side)
 
+// ------------------------------- Types -------------------------------------
 type Match = {
   tagId: string;
   placementIdUnderBranch: string | null;
@@ -11,6 +15,7 @@ type Match = {
   photoUrl: string | null;
 };
 
+// ----------------------------- API helpers ---------------------------------
 async function serialLookup(text: string): Promise<Match[]> {
   const sp = new URLSearchParams();
   sp.set('q', text);
@@ -35,34 +40,10 @@ async function assignTag(itemId: string, tagId: string, placementId?: string | n
   }
 }
 
-/* ------------------------ OCR (static, no workers) ------------------------ */
-
-let tMod: any = null;
-async function recognizeText(dataUrl: string, psm: '7'|'6' = '7'): Promise<string> {
-  if (!tMod) tMod = await import('tesseract.js');
-  const recognize = tMod?.recognize || tMod?.default?.recognize || tMod?.Tesseract?.recognize;
-  if (typeof recognize !== 'function') throw new Error('tesseract_unavailable');
-
-  const opts = {
-    tessedit_pageseg_mode: psm,                           // 7 = single line (preferred)
-    tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-',
-    tessedit_char_blacklist: 'abcdefghijklmnopqrstuvwxyz_~`!@#$%^&*()+=[]{}|\\;:\'",.<>/?',
-    load_system_dawg: '0',
-    load_freq_dawg: '0',
-    preserve_interword_spaces: '1',
-    classify_bln_numeric_mode: '0',
-    user_defined_dpi: '300',
-  } as any;
-
-  const res = await recognize(dataUrl, 'eng', opts);
-  return ((res?.data?.text || (res as any)?.text || '') as string).toUpperCase();
-}
-
-/* ---------------------- Candidate extraction (light) ---------------------- */
-
+// ---------------------- Candidate extraction (light) -----------------------
 function extractSerialCandidates(text: string): string[] {
   const up = text.toUpperCase().replace(/[–—]/g, '-');
-  // Only allow A–Z, 0–9, dash and spaces to be safe
+  // Only allow A–Z, 0–9, dash and spaces
   const cleaned = up.replace(/[^A-Z0-9\-\s]/g, ' ').replace(/\s+/g, ' ').trim();
   const tokens = Array.from(new Set((cleaned.match(/[A-Z0-9\-]{3,}/g) || []).map(t => t.trim())));
   // serial-like: must contain at least one dash, reasonable length
@@ -79,8 +60,7 @@ function bestCandidate(cands: string[]): string | null {
   return cands.sort((a, b) => score(b) - score(a))[0] || null;
 }
 
-/* --------------------------- Light preprocessing -------------------------- */
-
+// --------------------------- Light preprocessing ---------------------------
 // 1) crop a small center band from video/canvas, scale to target width
 function cropBand(videoOrCanvas: HTMLVideoElement | HTMLCanvasElement, targetW = 640) : HTMLCanvasElement {
   const vw = (videoOrCanvas as any).videoWidth || (videoOrCanvas as HTMLCanvasElement).width || 1280;
@@ -153,15 +133,14 @@ function toMildBinary(src: HTMLCanvasElement): HTMLCanvasElement {
   return c;
 }
 
-/* --------------------------------- Page ---------------------------------- */
-
+// --------------------------------- Page ------------------------------------
 export default function ScanInventoryPage() {
   const sp = useSearchParams();
   const idsParam = sp.get('ids') || '';
   const itemIds = useMemo(() => idsParam.split(',').map(s => s.trim()).filter(Boolean), [idsParam]);
 
   const [idx, setIdx] = useState(0);
-  const currentItemId = itemIds[idx] || null; // single declaration
+  const currentItemId = itemIds[idx] || null;
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
@@ -173,6 +152,7 @@ export default function ScanInventoryPage() {
   const [matches, setMatches] = useState<Match[]>([]);
   const [manualSerial, setManualSerial] = useState('');
   const [err, setErr] = useState<string | null>(null);
+  const [errAt, setErrAt] = useState<number>(0);
 
   // start camera (small preview)
   useEffect(() => {
@@ -188,8 +168,8 @@ export default function ScanInventoryPage() {
           audio: false,
         });
         if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-          await videoRef.current.play();
+          videoRef.current!.srcObject = stream;
+          await videoRef.current!.play();
         }
       } catch (e: any) {
         setErr(e?.message || 'camera_error');
@@ -205,6 +185,7 @@ export default function ScanInventoryPage() {
       if (scanning) return;
       try {
         setScanning(true);
+        if (err) setErr(null);
         const v = videoRef.current;
         if (!v || v.readyState < 2) return;
 
@@ -225,24 +206,22 @@ export default function ScanInventoryPage() {
         let topCandidate: string | null = null;
 
         for (const durl of variants) {
-          // First with PSM 7 (single line), then fallback PSM 6 if needed
-          let text = await recognizeText(durl, '7');
-          if (!text || !text.includes('-')) {
-            const t6 = await recognizeText(durl, '6');
-            if ((t6?.length || 0) > (text?.length || 0)) text = t6;
-          }
-          if (text && text.length > bestTextLocal.length) bestTextLocal = text;
+          // NEW: PP-OCR — returns multiple tokens/lines; join and feed your existing pipeline
+          const { tokens, raw } = await serverPpocr(durl, true);
+          const joined = (tokens.length ? tokens : raw).join(' ');
+          if (joined && joined.length > bestTextLocal.length) bestTextLocal = joined;
 
-          const cands = extractSerialCandidates(text);
+          const cands = extractSerialCandidates(joined);
           const top = bestCandidate(cands);
           if (top) { topCandidate = top; break; }
         }
 
         setLastText(bestTextLocal);
-
+        if (bestTextLocal || topCandidate) setErr(null);
         if (!topCandidate) return;
 
         const ms = await serialLookup(topCandidate);
+        setErr(null);
         setMatches(ms);
 
         if (ms.length) {
@@ -253,12 +232,13 @@ export default function ScanInventoryPage() {
         }
       } catch (e: any) {
         setErr(e?.message || 'scan_failed');
+        setErrAt(Date.now());
       } finally {
         setScanning(false);
       }
     }, 1000);
     return () => clearInterval(id);
-  }, [live, locked, scanning]);
+  }, [live, locked, scanning, err]);
 
   // manual override live lookup when paused
   useEffect(() => {
@@ -324,7 +304,10 @@ export default function ScanInventoryPage() {
                   Live scan
                 </label>
                 {scanning && <span className="ml-3 text-xs text-gray-400">scanning…</span>}
-                {err && <span className="ml-3 text-xs text-red-400">{err}</span>}
+                {(() => {
+    const fresh = err && (Date.now() - errAt < 3000); // show error only for 3s
+    return fresh ? <span className="ml-3 text-xs text-red-400">{err}</span> : null;
+  })()}
                 <div className="mt-2 text-xs text-gray-400">Keep the serial inside the box. It will lock when detected.</div>
               </div>
             </div>

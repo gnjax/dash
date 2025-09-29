@@ -1,8 +1,8 @@
 # Codebase Summary
 
-> Generated: 2025-09-27T21:33:29.797Z
-> Commit: 4c4d754fd1b44168a09b51649b5ced4073739c5e
-> Date: 2025-09-27 17:18:07 +0200
+> Generated: 2025-09-29T08:30:01.559Z
+> Commit: 81f027605a7be5478de32500c3e05816aca917a8
+> Date: 2025-09-27 23:33:29 +0200
 > Remote: git@github.com:gnjax/dash.git
 
 This file concatenates important text/code files in the repo so a single raw URL can be shared.
@@ -350,6 +350,130 @@ async function main() {
   });
 }
 main().finally(()=>prisma.$disconnect());
+```
+
+---
+
+## services/ocr/main.py
+
+```python
+from fastapi import FastAPI, UploadFile, File
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+from typing import List, Optional
+from paddleocr import PaddleOCR
+import base64, io, re
+from PIL import Image
+
+# Init OCR (angle classifier + det + rec)
+# lang='en' keeps the recognizer focused; use_gpu=False for portability (enable later if you add GPU)
+ocr = PaddleOCR(use_angle_cls=True, lang='en', det=True, rec=True, use_gpu=False)
+
+app = FastAPI()
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # tighten to your domain in prod
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Accept serial-looking chars only (uppercase A-Z, digits, dash). We will still return raw for debugging.
+ALLOWED = re.compile(r'[A-Z0-9-]+')
+
+class OcrRequest(BaseModel):
+    image_b64: str  # data URL or raw base64 accepted
+    # optional: hint that text is mostly horizontal — helps with postfiltering (we’ll still use angle_cls)
+    prefer_horizontal: Optional[bool] = True
+
+class OcrBox(BaseModel):
+    text: str
+    conf: float
+    box: List[List[float]]  # 4 points (x,y)
+
+class OcrResponse(BaseModel):
+    lines: List[OcrBox]
+    # Convenience field with filtered, uppercased tokens (good for serial matching)
+    tokens: List[str]
+
+def _load_b64_image(b64: str) -> Image.Image:
+    # Strip data URL header if present
+    if ',' in b64 and b64.split(',', 1)[0].startswith('data:'):
+        b64 = b64.split(',', 1)[1]
+    data = base64.b64decode(b64)
+    img = Image.open(io.BytesIO(data)).convert('RGB')
+    return img
+
+@app.post("/ocr", response_model=OcrResponse)
+def do_ocr(req: OcrRequest):
+    img = _load_b64_image(req.image_b64)
+    # PaddleOCR expects a file path or ndarray; pillow image to ndarray:
+    import numpy as np
+    arr = np.array(img)[:, :, ::-1]  # to BGR
+
+    result = ocr.ocr(arr, cls=True)  # angle classification on
+    # result is list per page; we pass a single image → result[0]
+    lines = []
+    tokens = []
+
+    if result and len(result) > 0:
+        for line in result[0]:
+            # line[0] = 4-point box, line[1] = (text, confidence)
+            box = line[0]
+            raw_text, conf = line[1]
+            up = (raw_text or "").upper()
+            # filter to allowed chars (drop punctuation, spaces)
+            filtered = ''.join(ch for ch in up if ('A' <= ch <= 'Z') or ('0' <= ch <= '9') or ch == '-')
+            if filtered:
+                tokens.append(filtered)
+            lines.append(OcrBox(text=up, conf=float(conf), box=box))
+
+    # Simple preference for horizontal serials: keep wide-ish boxes first (optional)
+    if req.prefer_horizontal and lines:
+        def wide_score(b: OcrBox):
+            x_coords = [p[0] for p in b.box]; y_coords = [p[1] for p in b.box]
+            w = max(x_coords) - min(x_coords); h = max(y_coords) - min(y_coords)
+            return (w - h)  # wider → higher
+        lines.sort(key=wide_score, reverse=True)
+
+    return OcrResponse(lines=lines, tokens=tokens)
+
+# Also allow multipart upload for manual tests (e.g., with curl)
+@app.post("/ocr-multipart", response_model=OcrResponse)
+async def do_ocr_multipart(file: UploadFile = File(...)):
+    img = Image.open(io.BytesIO(await file.read())).convert('RGB')
+    import numpy as np
+    arr = np.array(img)[:, :, ::-1]
+    result = ocr.ocr(arr, cls=True)
+    lines = []
+    tokens = []
+    if result and len(result) > 0:
+        for line in result[0]:
+            box = line[0]
+            raw_text, conf = line[1]
+            up = (raw_text or "").upper()
+            filtered = ''.join(ch for ch in up if ('A' <= ch <= 'Z') or ('0' <= ch <= '9') or ch == '-')
+            if filtered:
+                tokens.append(filtered)
+            lines.append(OcrBox(text=up, conf=float(conf), box=box))
+    return OcrResponse(lines=lines, tokens=tokens)
+
+```
+
+---
+
+## services/ocr/requirements.txt
+
+```
+numpy==1.26.4
+opencv-python-headless==4.10.0.84
+fastapi==0.115.0
+uvicorn==0.30.6
+pillow==10.4.0
+paddlepaddle==2.6.1
+paddleocr==2.7.3
+python-multipart==0.0.9
+
 ```
 
 ---
@@ -1511,6 +1635,62 @@ export async function POST(req: NextRequest) {
   });
 
   return NextResponse.json({ manualPurchaseId: mp.id }, { status: 201 });
+}
+
+```
+
+---
+
+## src/app/api/ocr/route.ts
+
+```ts
+// src/app/api/ocr/route.ts
+import { NextRequest, NextResponse } from 'next/server';
+
+const OCR_URL = process.env.OCR_URL || 'http://localhost:8000';
+
+function dataUrlToBuffer(dataUrl: string): { buf: Buffer; mime: string } {
+  const i = dataUrl.indexOf(',');
+  if (i === -1) throw new Error('bad_data_url');
+  const header = dataUrl.slice(0, i);
+  const b64 = dataUrl.slice(i + 1);
+  const m = /data:(.*?);base64/.exec(header);
+  const mime = m?.[1] || 'image/png';
+  const buf = Buffer.from(b64, 'base64');
+  return { buf, mime };
+}
+
+export async function POST(req: NextRequest) {
+  try {
+    const { image_b64, prefer_horizontal = true } = await req.json();
+    const { buf, mime } = dataUrlToBuffer(image_b64);
+
+    const fd = new FormData();
+    const filename = `scan.${mime.split('/')[1] || 'png'}`;
+    fd.append('file', new Blob([buf], { type: mime }), filename);
+
+    const upstream = await fetch(
+      `${OCR_URL}/ocr-multipart?prefer_horizontal=${prefer_horizontal ? '1' : '0'}`,
+      { method: 'POST', body: fd, cache: 'no-store' }
+    );
+
+    const text = await upstream.text();
+
+    if (!upstream.ok) {
+      // 👇 Tolerant fallback: treat upstream errors as "no detections this frame"
+      console.error('OCR upstream error:', upstream.status, text.slice(0, 200));
+      return NextResponse.json({ lines: [], tokens: [] }, { status: 200 });
+    }
+
+    return new NextResponse(text, {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  } catch (e: any) {
+    // Also tolerant on proxy exceptions: don't break the scan loop
+    console.error('OCR proxy error:', e);
+    return NextResponse.json({ lines: [], tokens: [] }, { status: 200 });
+  }
 }
 
 ```
@@ -3727,11 +3907,15 @@ export default function InventoryPage() {
 ## src/app/inventory/scan/page.tsx
 
 ```tsx
+// src/app/inventory/scan/page.tsx
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
+import { serverPpocr } from '@/lib/ocr/server-ppocr';
+ // NEW: PP-OCR via ONNX (client-side)
 
+// ------------------------------- Types -------------------------------------
 type Match = {
   tagId: string;
   placementIdUnderBranch: string | null;
@@ -3740,6 +3924,7 @@ type Match = {
   photoUrl: string | null;
 };
 
+// ----------------------------- API helpers ---------------------------------
 async function serialLookup(text: string): Promise<Match[]> {
   const sp = new URLSearchParams();
   sp.set('q', text);
@@ -3764,34 +3949,10 @@ async function assignTag(itemId: string, tagId: string, placementId?: string | n
   }
 }
 
-/* ------------------------ OCR (static, no workers) ------------------------ */
-
-let tMod: any = null;
-async function recognizeText(dataUrl: string, psm: '7'|'6' = '7'): Promise<string> {
-  if (!tMod) tMod = await import('tesseract.js');
-  const recognize = tMod?.recognize || tMod?.default?.recognize || tMod?.Tesseract?.recognize;
-  if (typeof recognize !== 'function') throw new Error('tesseract_unavailable');
-
-  const opts = {
-    tessedit_pageseg_mode: psm,                           // 7 = single line (preferred)
-    tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-',
-    tessedit_char_blacklist: 'abcdefghijklmnopqrstuvwxyz_~`!@#$%^&*()+=[]{}|\\;:\'",.<>/?',
-    load_system_dawg: '0',
-    load_freq_dawg: '0',
-    preserve_interword_spaces: '1',
-    classify_bln_numeric_mode: '0',
-    user_defined_dpi: '300',
-  } as any;
-
-  const res = await recognize(dataUrl, 'eng', opts);
-  return ((res?.data?.text || (res as any)?.text || '') as string).toUpperCase();
-}
-
-/* ---------------------- Candidate extraction (light) ---------------------- */
-
+// ---------------------- Candidate extraction (light) -----------------------
 function extractSerialCandidates(text: string): string[] {
   const up = text.toUpperCase().replace(/[–—]/g, '-');
-  // Only allow A–Z, 0–9, dash and spaces to be safe
+  // Only allow A–Z, 0–9, dash and spaces
   const cleaned = up.replace(/[^A-Z0-9\-\s]/g, ' ').replace(/\s+/g, ' ').trim();
   const tokens = Array.from(new Set((cleaned.match(/[A-Z0-9\-]{3,}/g) || []).map(t => t.trim())));
   // serial-like: must contain at least one dash, reasonable length
@@ -3808,8 +3969,7 @@ function bestCandidate(cands: string[]): string | null {
   return cands.sort((a, b) => score(b) - score(a))[0] || null;
 }
 
-/* --------------------------- Light preprocessing -------------------------- */
-
+// --------------------------- Light preprocessing ---------------------------
 // 1) crop a small center band from video/canvas, scale to target width
 function cropBand(videoOrCanvas: HTMLVideoElement | HTMLCanvasElement, targetW = 640) : HTMLCanvasElement {
   const vw = (videoOrCanvas as any).videoWidth || (videoOrCanvas as HTMLCanvasElement).width || 1280;
@@ -3882,15 +4042,14 @@ function toMildBinary(src: HTMLCanvasElement): HTMLCanvasElement {
   return c;
 }
 
-/* --------------------------------- Page ---------------------------------- */
-
+// --------------------------------- Page ------------------------------------
 export default function ScanInventoryPage() {
   const sp = useSearchParams();
   const idsParam = sp.get('ids') || '';
   const itemIds = useMemo(() => idsParam.split(',').map(s => s.trim()).filter(Boolean), [idsParam]);
 
   const [idx, setIdx] = useState(0);
-  const currentItemId = itemIds[idx] || null; // single declaration
+  const currentItemId = itemIds[idx] || null;
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
@@ -3902,6 +4061,7 @@ export default function ScanInventoryPage() {
   const [matches, setMatches] = useState<Match[]>([]);
   const [manualSerial, setManualSerial] = useState('');
   const [err, setErr] = useState<string | null>(null);
+  const [errAt, setErrAt] = useState<number>(0);
 
   // start camera (small preview)
   useEffect(() => {
@@ -3917,8 +4077,8 @@ export default function ScanInventoryPage() {
           audio: false,
         });
         if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-          await videoRef.current.play();
+          videoRef.current!.srcObject = stream;
+          await videoRef.current!.play();
         }
       } catch (e: any) {
         setErr(e?.message || 'camera_error');
@@ -3934,6 +4094,7 @@ export default function ScanInventoryPage() {
       if (scanning) return;
       try {
         setScanning(true);
+        if (err) setErr(null);
         const v = videoRef.current;
         if (!v || v.readyState < 2) return;
 
@@ -3954,24 +4115,22 @@ export default function ScanInventoryPage() {
         let topCandidate: string | null = null;
 
         for (const durl of variants) {
-          // First with PSM 7 (single line), then fallback PSM 6 if needed
-          let text = await recognizeText(durl, '7');
-          if (!text || !text.includes('-')) {
-            const t6 = await recognizeText(durl, '6');
-            if ((t6?.length || 0) > (text?.length || 0)) text = t6;
-          }
-          if (text && text.length > bestTextLocal.length) bestTextLocal = text;
+          // NEW: PP-OCR — returns multiple tokens/lines; join and feed your existing pipeline
+          const { tokens, raw } = await serverPpocr(durl, true);
+          const joined = (tokens.length ? tokens : raw).join(' ');
+          if (joined && joined.length > bestTextLocal.length) bestTextLocal = joined;
 
-          const cands = extractSerialCandidates(text);
+          const cands = extractSerialCandidates(joined);
           const top = bestCandidate(cands);
           if (top) { topCandidate = top; break; }
         }
 
         setLastText(bestTextLocal);
-
+        if (bestTextLocal || topCandidate) setErr(null);
         if (!topCandidate) return;
 
         const ms = await serialLookup(topCandidate);
+        setErr(null);
         setMatches(ms);
 
         if (ms.length) {
@@ -3982,12 +4141,13 @@ export default function ScanInventoryPage() {
         }
       } catch (e: any) {
         setErr(e?.message || 'scan_failed');
+        setErrAt(Date.now());
       } finally {
         setScanning(false);
       }
     }, 1000);
     return () => clearInterval(id);
-  }, [live, locked, scanning]);
+  }, [live, locked, scanning, err]);
 
   // manual override live lookup when paused
   useEffect(() => {
@@ -4053,7 +4213,10 @@ export default function ScanInventoryPage() {
                   Live scan
                 </label>
                 {scanning && <span className="ml-3 text-xs text-gray-400">scanning…</span>}
-                {err && <span className="ml-3 text-xs text-red-400">{err}</span>}
+                {(() => {
+    const fresh = err && (Date.now() - errAt < 3000); // show error only for 3s
+    return fresh ? <span className="ml-3 text-xs text-red-400">{err}</span> : null;
+  })()}
                 <div className="mt-2 text-xs text-gray-400">Keep the serial inside the box. It will lock when detected.</div>
               </div>
             </div>
@@ -5792,6 +5955,30 @@ export function yenToEuro(yen: number, rate: number | null): number {
   const eur = yen * rate;
   // Round to 2 decimals for display
   return Math.round(eur * 100) / 100;
+}
+
+```
+
+---
+
+## src/lib/ocr/server-ppocr.ts
+
+```ts
+// src/lib/ocr/server-ppocr.ts
+export async function serverPpocr(dataUrl: string, preferHorizontal = true): Promise<{ tokens: string[]; raw: string[] }> {
+  const r = await fetch('/api/ocr', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ image_b64: dataUrl, prefer_horizontal: preferHorizontal }),
+  });
+  if (!r.ok) {
+    const text = await r.text().catch(() => '');
+    throw new Error(`ocr_proxy_${r.status} ${text}`);
+  }
+  const j = await r.json();
+  const tokens: string[] = (j.tokens || []) as string[];
+  const raw: string[] = (j.lines || []).map((l: any) => l.text);
+  return { tokens, raw };
 }
 
 ```

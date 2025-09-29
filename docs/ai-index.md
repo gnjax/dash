@@ -1,6 +1,6 @@
 # Project Raw File Index
 
-Generated: 2025-09-27T21:33:29.860Z
+Generated: 2025-09-29T08:30:01.626Z
 
 > Click any link to open the **raw** file on GitHub.
 
@@ -15,6 +15,7 @@ Repository: `gnjax/dash`
 - [docs](#docs)
 - [prisma](#prisma)
 - [public](#public)
+- [services](#services)
 - [src](#src)
 
 ---
@@ -77,6 +78,14 @@ Repository: `gnjax/dash`
 - [`public/vercel.svg`](https://raw.githubusercontent.com/gnjax/dash/refs/heads/main/public/vercel.svg)
 - [`public/window.svg`](https://raw.githubusercontent.com/gnjax/dash/refs/heads/main/public/window.svg)
 
+## services
+
+- [`services/ocr/Dockerfile`](https://raw.githubusercontent.com/gnjax/dash/refs/heads/main/services/ocr/Dockerfile)
+- [`services/ocr/main.py`](https://raw.githubusercontent.com/gnjax/dash/refs/heads/main/services/ocr/main.py)
+- [`services/ocr/requirements.txt`](https://raw.githubusercontent.com/gnjax/dash/refs/heads/main/services/ocr/requirements.txt)
+- [`services/ocr/testt.png`](https://raw.githubusercontent.com/gnjax/dash/refs/heads/main/services/ocr/testt.png)
+- [`services/ocr/testt.png:Zone.Identifier`](https://raw.githubusercontent.com/gnjax/dash/refs/heads/main/services/ocr/testt.png%3AZone.Identifier)
+
 ## src
 
 - [`src/app/api/fill-sessions/[id]/finalize/route.ts`](https://raw.githubusercontent.com/gnjax/dash/refs/heads/main/src/app/api/fill-sessions/%5Bid%5D/finalize/route.ts)
@@ -87,6 +96,7 @@ Repository: `gnjax/dash`
 - [`src/app/api/inventory/assign-tag/route.ts`](https://raw.githubusercontent.com/gnjax/dash/refs/heads/main/src/app/api/inventory/assign-tag/route.ts)
 - [`src/app/api/inventory/route.ts`](https://raw.githubusercontent.com/gnjax/dash/refs/heads/main/src/app/api/inventory/route.ts)
 - [`src/app/api/manual-purchase/route.ts`](https://raw.githubusercontent.com/gnjax/dash/refs/heads/main/src/app/api/manual-purchase/route.ts)
+- [`src/app/api/ocr/route.ts`](https://raw.githubusercontent.com/gnjax/dash/refs/heads/main/src/app/api/ocr/route.ts)
 - [`src/app/api/profile/refresh/confirm/route.ts`](https://raw.githubusercontent.com/gnjax/dash/refs/heads/main/src/app/api/profile/refresh/confirm/route.ts)
 - [`src/app/api/profile/refresh/start/route.ts`](https://raw.githubusercontent.com/gnjax/dash/refs/heads/main/src/app/api/profile/refresh/start/route.ts)
 - [`src/app/api/scrape/buyee-crawl/route.ts`](https://raw.githubusercontent.com/gnjax/dash/refs/heads/main/src/app/api/scrape/buyee-crawl/route.ts)
@@ -118,6 +128,7 @@ Repository: `gnjax/dash`
 - [`src/components/SingleTagPicker.tsx`](https://raw.githubusercontent.com/gnjax/dash/refs/heads/main/src/components/SingleTagPicker.tsx)
 - [`src/components/WeightSliders.tsx`](https://raw.githubusercontent.com/gnjax/dash/refs/heads/main/src/components/WeightSliders.tsx)
 - [`src/lib/fx.client.ts`](https://raw.githubusercontent.com/gnjax/dash/refs/heads/main/src/lib/fx.client.ts)
+- [`src/lib/ocr/server-ppocr.ts`](https://raw.githubusercontent.com/gnjax/dash/refs/heads/main/src/lib/ocr/server-ppocr.ts)
 - [`src/lib/prisma.ts`](https://raw.githubusercontent.com/gnjax/dash/refs/heads/main/src/lib/prisma.ts)
 - [`src/lib/refresh-runner.ts`](https://raw.githubusercontent.com/gnjax/dash/refs/heads/main/src/lib/refresh-runner.ts)
 - [`src/lib/scrape.ts`](https://raw.githubusercontent.com/gnjax/dash/refs/heads/main/src/lib/scrape.ts)
